@@ -50,7 +50,7 @@ const style = styleSchema.describe(
   'Visual style. Colours are hex like #1971c2. fill is the background, stroke the outline and text colour.',
 )
 
-const shape = z.enum(shapes).describe('rect, ellipse, diamond, or sticky (a sticky note).')
+const shape = z.enum(shapes).describe('rect, ellipse, diamond, sticky (a sticky note), or cylinder (a database or other store).')
 
 export const llmOpSchema = z.discriminatedUnion('op', [
   z.object({

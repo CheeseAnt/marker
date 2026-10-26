@@ -37,8 +37,8 @@ export const LABEL_MARGIN = 40
 
 export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
   const text = measureText(node.label || ' ', fontSize, font)
-  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70] }[node.shape]
-  const min = node.shape === 'sticky' ? { w: 160, h: 160 } : { w: 120, h: 60 }
+  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape]
+  const min = node.shape === 'sticky' ? { w: 160, h: 160 } : node.shape === 'cylinder' ? { w: 120, h: 90 } : { w: 120, h: 60 }
   return {
     w: Math.max(min.w, Math.min(480, text.w + pad[0])),
     h: Math.max(min.h, text.h + pad[1]),

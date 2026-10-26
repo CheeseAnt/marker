@@ -10,7 +10,7 @@ const SUMMARY_CHAR_LIMIT = 8_000
 
 export const SYSTEM_PROMPT = `You edit a hand-drawn whiteboard for the user. The board is described in a small text format, one element per line:
 
-  node <id> "<label>" <rect|ellipse|diamond|sticky> [at(x,y) | below(<id>,gap) | above(..) | left(..) | right(..)] [size(w,h)] [style]
+  node <id> "<label>" <rect|ellipse|diamond|sticky|cylinder> [at(x,y) | below(<id>,gap) | above(..) | left(..) | right(..)] [size(w,h)] [style]
   edge <id> <from> -> <to> ["label"] [dashed|dotted] [style]     (heads: ->, <-, <->, --)
   text <id> "<text>" [placement] [style]
   group <id> ["label"] [member, member, ...]

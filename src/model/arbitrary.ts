@@ -87,13 +87,13 @@ export const boardArb: fc.Arbitrary<Board> = fc
       const base = { id, style: r.style, hints: r.hints }
       switch (anchors.length < 2 && k === 1 ? 0 : k) {
         case 0: {
-          const shapes = ['rect', 'ellipse', 'diamond', 'sticky'] as const
+          const shapes = ['rect', 'ellipse', 'diamond', 'sticky', 'cylinder'] as const
           const at = placement()
           elements.push({
             ...base,
             kind: 'node',
             label: r.label,
-            shape: shapes[r.pick[3] % 4],
+            shape: shapes[r.pick[3] % shapes.length],
             ...(at && { at }),
             ...(r.flags[2] && { size: { w: r.w, h: r.h } }),
           })

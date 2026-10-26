@@ -46,7 +46,7 @@ export type StyleKey = keyof Style
 export const hintsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
 export type Hints = z.infer<typeof hintsSchema>
 
-export const shapes = ['rect', 'ellipse', 'diamond', 'sticky'] as const
+export const shapes = ['rect', 'ellipse', 'diamond', 'sticky', 'cylinder'] as const
 export type Shape = (typeof shapes)[number]
 
 export const endpointSchema = z.union([
