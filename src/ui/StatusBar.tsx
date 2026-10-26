@@ -1,5 +1,6 @@
 import { hasApiKey, useSettings } from '../settings/store'
 import { useBoard } from '../state/board'
+import { DRAWER_LABELS, type DrawerView } from './drawerViews'
 
 const PROVIDER_LABELS = { 'azure-foundry': 'Azure AI Foundry' } as const
 const VOICE_LABELS = {
@@ -12,11 +13,11 @@ const VOICE_LABELS = {
 interface Props {
   notice: string | null
   onDismissNotice: () => void
-  showText: boolean
-  onToggleText: () => void
+  drawer: DrawerView | null
+  onToggleDrawer: (view: DrawerView) => void
 }
 
-export function StatusBar({ notice, onDismissNotice, showText, onToggleText }: Props) {
+export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer }: Props) {
   const settings = useSettings((s) => s.settings)
   const secrets = useSettings((s) => s.secrets)
   const count = useBoard((s) => s.board.elements.filter((e) => e.kind !== 'group').length)
@@ -43,9 +44,13 @@ export function StatusBar({ notice, onDismissNotice, showText, onToggleText }: P
       ) : null}
       <span className="spacer" />
       <span>{count === 1 ? '1 element' : `${count} elements`}</span>
-      <button type="button" className="board-text-toggle" aria-pressed={showText} onClick={onToggleText}>
-        Board text
-      </button>
+      <div className="drawer-toggles" role="group" aria-label="Side panel">
+        {(Object.keys(DRAWER_LABELS) as DrawerView[]).map((view) => (
+          <button key={view} type="button" aria-pressed={drawer === view} onClick={() => onToggleDrawer(view)}>
+            {DRAWER_LABELS[view]}
+          </button>
+        ))}
+      </div>
     </footer>
   )
 }

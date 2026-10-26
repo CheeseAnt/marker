@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { CaptureUpdateAction, Excalidraw, hashElementsVersion, restoreElements } from '@excalidraw/excalidraw'
+import { CaptureUpdateAction, Excalidraw, Footer, hashElementsVersion, restoreElements } from '@excalidraw/excalidraw'
 import type { AppState, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import { diffScene } from '../compile/fromExcalidraw'
 import type { ExElement } from '../compile/exTypes'
 import { OpError } from '../model/apply'
-import { useBoard } from '../state/board'
+import { setPendingEditsFlusher, useBoard } from '../state/board'
 import { debounce } from '../storage/idb'
 
 /** True while the user is mid-gesture; syncing then would fight Excalidraw's own state. */
@@ -79,6 +79,12 @@ export function BoardCanvas({ onError }: Props) {
 
   const readSoon = useMemo(() => debounce(readScene, 250), [readScene])
 
+  // Undo must see edits that are still waiting for the debounce.
+  useEffect(() => {
+    setPendingEditsFlusher(readScene)
+    return () => setPendingEditsFlusher(() => {})
+  }, [readScene])
+
   // Re-render whenever the board changes, including after our own manual-edit ops, so derived
   // geometry (relative placement, arrow routing, re-keyed ids) is shown as the board has it.
   const firstRevision = useRef(revision)
@@ -110,7 +116,38 @@ export function BoardCanvas({ onError }: Props) {
         }}
         onChange={() => readSoon()}
         onPointerUp={() => setTimeout(readScene, 0)}
-      />
+      >
+        <Footer>
+          <HistoryButtons />
+        </Footer>
+      </Excalidraw>
+    </div>
+  )
+}
+
+function UndoIcon({ flip = false }: { flip?: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={flip ? { transform: 'scaleX(-1)' } : undefined}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </svg>
+  )
+}
+
+/** Undo and redo in the spot where Excalidraw's own (hidden) buttons were. */
+function HistoryButtons() {
+  const canUndo = useBoard((s) => s.history.past.length > 0)
+  const canRedo = useBoard((s) => s.history.future.length > 0)
+  const undo = useBoard((s) => s.undo)
+  const redo = useBoard((s) => s.redo)
+  return (
+    <div className="history-buttons">
+      <button type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}>
+        <UndoIcon />
+      </button>
+      <button type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={redo}>
+        <UndoIcon flip />
+      </button>
     </div>
   )
 }

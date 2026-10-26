@@ -1,4 +1,5 @@
 import { center, DEFAULT_FONT_SIZE, effectiveStyle, measureText, resolveBoxes, type Box } from '../model/geometry'
+import { hashString } from '../model/hash'
 import { parsePath } from '../model/path'
 import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, Point, Style } from '../model/types'
 import {
@@ -15,12 +16,7 @@ import {
 
 /** Stable 31-bit hash so an element keeps the same hand-drawn wobble across compiles. */
 export function seedFor(id: string): number {
-  let h = 0x811c9dc5
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i)
-    h = Math.imul(h, 0x01000193)
-  }
-  return (h >>> 0) % 2_147_483_647 || 1
+  return hashString(id) % 2_147_483_647 || 1
 }
 
 function hintNum(h: Hints, key: string): number | undefined {

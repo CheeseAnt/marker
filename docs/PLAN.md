@@ -337,6 +337,13 @@ recording → transcribing → queued → building context → calling model →
 - **Persistence:** the board is autosaved as DSL text in IndexedDB. The phase 1 raw-scene autosave is migrated once through the decompiler.
 - **Not yet:** `cylinder` and `frame` shapes, template ports (parsed, not used), image file bytes (phase 6).
 
+**Phase 3 (done, 2026-10-26)**
+- **History module:** `src/history/` is pure (`record` / `undo` / `redo` / `jumpTo`). Each transaction stores the applied ops (with cascades) and their inverse, plus its source, title and optional prompt. Titles describe what was asked for, before cascades ("Moved “API Gateway”", "Deleted 2 elements").
+- **Undo and redo:** Ctrl/Cmd+Z undoes; Ctrl/Cmd+Shift+Z or Ctrl+Y redoes. Text fields, including Excalidraw's own text editor, keep native undo. Canvas edits still waiting on the debounce are flushed before any history move, so they can't be lost.
+- **Where it shows:** undo and redo buttons sit in Excalidraw's footer, beside zoom. The History drawer lists changes newest first, marks the current state, strikes through undone steps, and jumps on click.
+- **Persistence:** history (capped at 300) is saved to IndexedDB in the same write as the board text, tagged with a hash of that text. It's only restored when the hash matches.
+- **Deferred to phase 10:** the optional `history` section inside saved `.board` files lands with real file open and save.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

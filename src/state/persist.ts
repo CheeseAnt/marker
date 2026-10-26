@@ -5,7 +5,18 @@ import { parseBoard } from '../dsl/parse'
 import { printBoard } from '../dsl/print'
 import { commit } from '../model/apply'
 import { emptyBoard, type Board } from '../model/types'
-import { debounce, deleteLegacyScene, loadBoardText, loadLegacyScene, quarantineBoardText, saveBoardText } from '../storage/idb'
+import { emptyHistory, type History } from '../history/history'
+import { hashString } from '../model/hash'
+import {
+  debounce,
+  deleteLegacyScene,
+  loadBoardText,
+  loadHistory,
+  loadLegacyScene,
+  quarantineBoardText,
+  saveBoardAndHistory,
+  saveBoardText,
+} from '../storage/idb'
 import { useBoard } from './board'
 
 /** Reads an Excalidraw scene into a board by treating every element as hand-drawn. */
@@ -15,12 +26,23 @@ export function boardFromScene(elements: readonly unknown[], title = 'Untitled')
   return commit(board, ops).board
 }
 
-/** Loads the saved board (migrating the phase 1 autosave), then saves on every change. */
+function isHistory(value: unknown): value is History {
+  const h = value as History | undefined
+  return Array.isArray(h?.past) && Array.isArray(h?.future)
+}
+
+/** The saved history, if it was saved together with exactly this board text. */
+async function historyFor(text: string): Promise<History> {
+  const stored = await loadHistory()
+  return stored && stored.boardHash === hashString(text) && isHistory(stored.history) ? stored.history : emptyHistory()
+}
+
+/** Loads the saved board and its history (migrating the phase 1 autosave), then saves on every change. */
 export async function startPersistence(onError: (message: string) => void): Promise<() => void> {
   const text = await loadBoardText()
   if (text !== undefined) {
     try {
-      useBoard.getState().load(parseBoard(text))
+      useBoard.getState().load(parseBoard(text), await historyFor(text))
     } catch (e) {
       await quarantineBoardText(text)
       onError(`Saved board could not be read and was set aside: ${(e as Error).message}`)
@@ -38,10 +60,13 @@ export async function startPersistence(onError: (message: string) => void): Prom
     }
   }
 
-  const save = debounce((board: Board) => {
-    saveBoardText(printBoard(board)).catch((e) => onError(`Autosave failed: ${(e as Error).message}`))
+  const save = debounce((board: Board, history: History) => {
+    const text = printBoard(board)
+    saveBoardAndHistory(text, { boardHash: hashString(text), history }).catch((e) =>
+      onError(`Autosave failed: ${(e as Error).message}`),
+    )
   }, 400)
   return useBoard.subscribe((state, prev) => {
-    if (state.board !== prev.board) save(state.board)
+    if (state.board !== prev.board || state.history !== prev.history) save(state.board, state.history)
   })
 }

@@ -205,9 +205,9 @@ button {
   text-decoration: underline;
 }
 
-/* ---- Board text drawer --------------------------------------------------- */
+/* ---- Drawer ------------------------------------------------------------- */
 
-.text-panel {
+.drawer {
   grid-area: drawer;
   width: min(30rem, 42vw);
   display: flex;
@@ -217,7 +217,7 @@ button {
   background: #fff;
 }
 
-.text-panel-header {
+.drawer-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -225,35 +225,47 @@ button {
   border-bottom: 1px solid var(--frame-light);
 }
 
-.text-panel-header h2 {
+.drawer-header h2 {
   margin: 0;
   font-size: var(--step-0);
 }
 
-.text-panel-header .spacer {
+.drawer-header .spacer {
   flex: 1;
 }
 
-.text-panel-header button {
+.drawer-header button {
   padding: 0.25rem 0.75rem;
+  font-size: var(--step--1);
   border-radius: 3px;
   border: 1px solid var(--frame);
   background: var(--board);
   cursor: pointer;
 }
 
-.text-panel-header button.primary {
+.drawer-header button.primary {
   background: var(--marker-blue);
   border-color: #1b469f;
   color: #fff;
 }
 
-.text-panel-header button:disabled {
+.drawer-header button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.text-panel textarea {
+.drawer-empty {
+  margin: 0;
+  padding: 1rem 0.75rem;
+  max-width: 32ch;
+  color: var(--ink-soft);
+  font-size: var(--step-0);
+  line-height: 1.5;
+}
+
+/* Board text */
+
+.text-panel-editor {
   flex: 1;
   min-height: 0;
   resize: none;
@@ -268,7 +280,7 @@ button {
   tab-size: 2;
 }
 
-.text-panel textarea:focus-visible {
+.text-panel-editor:focus-visible {
   outline-offset: -2px;
 }
 
@@ -280,9 +292,105 @@ button {
   font-family: var(--font-code);
 }
 
-.board-text-toggle {
+/* History: a column of states, the current one marked like a stroke of blue marker. */
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.history-row {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  border: 0;
+  border-left: 4px solid transparent;
+  background: none;
+  cursor: pointer;
+}
+
+.history-row:hover {
+  background: var(--board);
+}
+
+.history-row.current {
+  border-left-color: var(--marker-blue);
+  background: #eef3fc;
+}
+
+.history-row.undone {
+  color: var(--ink-soft);
+}
+
+.history-row.undone .history-title {
+  text-decoration: line-through;
+  text-decoration-color: var(--frame-deep);
+}
+
+.history-row.origin .history-title {
+  color: var(--ink-soft);
+}
+
+.history-prompt {
+  font-family: var(--font-hand);
+  font-size: var(--step-1);
+  line-height: 1.25;
+}
+
+.history-title {
+  font-size: var(--step-0);
+}
+
+.history-meta {
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+/* Undo and redo in Excalidraw's footer, styled like its own island buttons. */
+
+.history-buttons {
+  display: flex;
+  margin-left: 0.5rem;
+  border-radius: var(--border-radius-lg, 0.5rem);
+  overflow: hidden;
+  background: var(--island-bg-color, #fff);
+  box-shadow: 0 0 0 1px var(--default-border-color, #ebebeb);
+}
+
+.history-buttons button {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  background: var(--button-gray-1, #ececf4);
+  color: var(--icon-fill-color, var(--ink));
+  cursor: pointer;
+}
+
+.history-buttons button:hover:not(:disabled) {
+  background: var(--button-gray-2, #e0dfff);
+}
+
+.history-buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Status strip drawer toggles */
+
+.drawer-toggles {
+  display: flex;
+}
+
+.drawer-toggles button {
   padding: 0.125rem 0.625rem;
-  border-radius: 3px;
   border: 1px solid var(--frame-deep);
   background: var(--frame-light);
   cursor: pointer;
@@ -290,7 +398,16 @@ button {
   white-space: nowrap;
 }
 
-.board-text-toggle[aria-pressed='true'] {
+.drawer-toggles button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.drawer-toggles button:last-child {
+  border-radius: 0 3px 3px 0;
+  border-left: 0;
+}
+
+.drawer-toggles button[aria-pressed='true'] {
   background: var(--marker-blue);
   border-color: #1b469f;
   color: #fff;
@@ -303,7 +420,7 @@ button {
     grid-template-areas: 'canvas' 'drawer' 'ledge' 'status';
   }
 
-  .text-panel {
+  .drawer {
     width: auto;
     height: 40vh;
     border-left: 0;
@@ -313,5 +430,11 @@ button {
   .status {
     gap: 0.75rem;
     flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .history-row {
+    transition: background-color 120ms ease-out;
   }
 }

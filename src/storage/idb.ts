@@ -1,6 +1,7 @@
-import { del, get, set } from 'idb-keyval'
+import { del, get, set, setMany } from 'idb-keyval'
 
 const BOARD_KEY = 'boardbot.board.v1'
+const HISTORY_KEY = 'boardbot.history.v1'
 // Phase 1 autosaved the raw Excalidraw scene; it is migrated once and then deleted.
 const LEGACY_SCENE_KEY = 'boardbot.scene.v0'
 const CORRUPT_KEY = 'boardbot.board.corrupt'
@@ -15,6 +16,28 @@ export async function loadBoardText(): Promise<string | undefined> {
 
 export async function saveBoardText(text: string): Promise<void> {
   await set(BOARD_KEY, text)
+}
+
+/** Saved history plus a hash of the board text it belongs to. */
+export interface StoredHistory {
+  boardHash: number
+  history: unknown
+}
+
+export async function loadHistory(): Promise<StoredHistory | undefined> {
+  try {
+    return await get<StoredHistory>(HISTORY_KEY)
+  } catch {
+    return undefined
+  }
+}
+
+/** Board and history in one write, so they never disagree after a crash. */
+export async function saveBoardAndHistory(text: string, history: StoredHistory): Promise<void> {
+  await setMany([
+    [BOARD_KEY, text],
+    [HISTORY_KEY, history],
+  ])
 }
 
 /** Keeps unreadable board text aside instead of overwriting it. */

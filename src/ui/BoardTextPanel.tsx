@@ -33,8 +33,8 @@ export function BoardTextPanel() {
   }
 
   return (
-    <aside className="text-panel">
-      <div className="text-panel-header">
+    <>
+      <div className="drawer-header">
         <h2>Board text</h2>
         <span className="spacer" />
         {dirty && (
@@ -53,6 +53,7 @@ export function BoardTextPanel() {
         </button>
       </div>
       <textarea
+        className="text-panel-editor"
         aria-label="Board text"
         spellCheck={false}
         value={draft}
@@ -66,7 +67,11 @@ export function BoardTextPanel() {
           e.stopPropagation()
         }}
       />
-      {error && <div className="text-panel-error">{error}</div>}
-    </aside>
+      {error && (
+        <div className="text-panel-error" role="alert">
+          {error}
+        </div>
+      )}
+    </>
   )
 }
