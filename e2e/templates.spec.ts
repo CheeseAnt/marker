@@ -33,7 +33,7 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   await page.mouse.move(canvas.x + 560, canvas.y + 345, { steps: 6 })
   await page.mouse.up()
 
-  await page.getByRole('button', { name: 'Templates' }).click()
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
   await expect(page.getByText('Select shapes on the board and save them as a template')).toBeVisible()
   await page.getByRole('button', { name: 'Save selection as template' }).click()
   const dialog = page.getByRole('dialog', { name: 'Save as template' })
@@ -58,7 +58,7 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   await page.screenshot({ path: 'e2e/screenshots/template-panel.png' })
 
   // Ungrouping a copy detaches it into ordinary shapes.
-  await page.getByRole('button', { name: 'Templates' }).click()
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
   await page.mouse.click(canvas.x + 310, canvas.y + 210)
   await page.keyboard.press('ControlOrMeta+Shift+g')
   await expect.poll(async () => (await state(page)).board.elements.some((e) => e.id === 'web_server1')).toBe(false)
@@ -73,12 +73,12 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   await page.waitForTimeout(400)
   s = await state(page)
   expect(Object.keys(s.board.definitions)).toEqual(['web_server@1'])
-  await page.getByRole('button', { name: 'Templates' }).click()
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
   await expect(page.locator('.template-name')).toHaveText('Web server web_server, version 1')
   await page.getByRole('button', { name: 'Board text' }).click()
   await expect(page.getByRole('textbox', { name: 'Board text' })).toHaveValue(/use web_server2 web_server@1 at\(.*\n[\s\S]*define web_server@1 \{\n {2}board "Web server" v1\n {2}template web_server\n {2}param name "Web"\n {2}port in box center/)
   // The library exports to a file that lists every version.
-  await page.getByRole('button', { name: 'Templates' }).click()
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export library' }).click()
   const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'))
