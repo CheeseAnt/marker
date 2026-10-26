@@ -25,6 +25,28 @@ export function measureText(text: string, fontSize: number, font?: FontId): Size
   return { w: Math.ceil(longest * fontSize * fontPreset(font).charWidth), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
 }
 
+/** Breaks text into lines at spaces so each fits `maxWidth`, by the same estimate as measureText. */
+export function wrapText(text: string, fontSize: number, font: FontId | undefined, maxWidth: number): string {
+  const charW = fontSize * fontPreset(font).charWidth
+  const perLine = Math.max(1, Math.floor(maxWidth / charW))
+  return text
+    .split('\n')
+    .map((line) => {
+      const out: string[] = []
+      let current = ''
+      for (const word of line.split(' ')) {
+        const next = current ? `${current} ${word}` : word
+        if (next.length > perLine && current) {
+          out.push(current)
+          current = word
+        } else current = next
+      }
+      out.push(current)
+      return out.join('\n')
+    })
+    .join('\n')
+}
+
 /** Estimated size of an edge's label, if it has one. */
 export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefined {
   if (edge.kind !== 'edge' || !edge.label) return undefined
@@ -35,12 +57,18 @@ export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefine
 /** Room to leave around a label on an arrow, so some of the arrow still shows either side. */
 export const LABEL_MARGIN = 40
 
+const MAX_NODE_WIDTH = 480
+
 export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
-  const text = measureText(node.label || ' ', fontSize, font)
-  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape]
+  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape] // a cylinder's rims take 48px of its height at most
   const min = node.shape === 'sticky' ? { w: 160, h: 160 } : node.shape === 'cylinder' ? { w: 120, h: 90 } : { w: 120, h: 60 }
+  let text = measureText(node.label || ' ', fontSize, font)
+  // A label too long for the widest default wraps (in boxy shapes), so the shape grows taller.
+  if (text.w + pad[0] > MAX_NODE_WIDTH && ['rect', 'sticky', 'cylinder'].includes(node.shape)) {
+    text = measureText(wrapText(node.label, fontSize, font, MAX_NODE_WIDTH - 20), fontSize, font)
+  }
   return {
-    w: Math.max(min.w, Math.min(480, text.w + pad[0])),
+    w: Math.max(min.w, Math.min(MAX_NODE_WIDTH, text.w + pad[0])),
     h: Math.max(min.h, text.h + pad[1]),
   }
 }

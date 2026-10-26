@@ -26,6 +26,11 @@ import { THEME_LABELS, useTheme } from './theme'
 import { useSettings } from '../settings/store'
 
 const HIGHLIGHT_MS = 1600
+/**
+ * Faces are split into character ranges that load on first use, so loading a face without
+ * text fetches almost nothing. This covers what English labels use.
+ */
+const LATIN_SAMPLE = ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~–—‘’“”…•'
 /** How long the canvas must be quiet before hand-drawn elements get short ids. */
 const RENAME_IDLE_MS = 2000
 
@@ -141,6 +146,7 @@ export function BoardCanvas({ onError }: Props) {
   const renderPending = useRef(false)
   // Set when text must be re-measured even though the board itself did not change.
   const forceRender = useRef(false)
+  const waitingForFonts = useRef(false)
   const pendingHighlight = useRef<string[] | null>(null)
   // Elements drawn by hand that still have Excalidraw's long ids, and ids just renamed.
   const toShorten = useRef(new Set<string>())
@@ -186,6 +192,16 @@ export function BoardCanvas({ onError }: Props) {
     })
     seenVersion.current = hashElementsVersion(api.getSceneElementsIncludingDeleted())
     void loadImages(api)
+    // Text measured while its characters' font was still loading is too narrow and gets clipped:
+    // measure again once the browser has every face it asked for.
+    if (document.fonts.status === 'loading' && !waitingForFonts.current) {
+      waitingForFonts.current = true
+      void document.fonts.ready.then(() => {
+        waitingForFonts.current = false
+        forceRender.current = true
+        render()
+      })
+    }
 
     const ids = pendingHighlight.current
     pendingHighlight.current = null
@@ -361,7 +377,7 @@ export function BoardCanvas({ onError }: Props) {
           if (import.meta.env.DEV) Object.assign(window, { __markerFiles: () => Object.keys(api.getFiles()) })
           // Text is measured when rendered; a font that arrives later would leave it clipped.
           // Load every preset face, then render again so all text is measured in its real font.
-          Promise.all(FONT_PRESETS.map((f) => document.fonts.load(`20px "${f.css}"`)))
+          Promise.all(FONT_PRESETS.map((f) => document.fonts.load(`20px "${f.css}"`, LATIN_SAMPLE)))
             .catch(() => undefined)
             .then(() => {
               forceRender.current = true

@@ -82,6 +82,14 @@ function fontDiff(ex: ExElement, c: FontRef, style: Patch, hints: Patch) {
   }
 }
 
+/**
+ * What a label says. Excalidraw wraps text to fit its shape, and keeps what was typed as
+ * `originalText`; wrapping again (say, after a resize) is not an edit.
+ */
+function textOf(ex: ExElement | undefined): string {
+  return ex?.originalText ?? ex?.text ?? ''
+}
+
 function shapeOf(ex: ExElement, current?: BoardElement) {
   if (ex.type === 'rectangle') return current?.kind === 'node' && current.shape === 'sticky' ? 'sticky' : 'rect'
   return ex.type as 'ellipse' | 'diamond'
@@ -185,7 +193,7 @@ function copyChanges(el: InstanceElement, compiled: ExElement[], liveById: Map<s
   parts.forEach((c, i) => {
     const e = now[i]
     const path = childPath(el.id, c.id)
-    if (e.text !== undefined && e.text !== c.text) note(path, { text: e.text })
+    if (e.text !== undefined && textOf(e) !== textOf(c)) note(path, { text: textOf(e) })
     const style: Patch = {}
     if (!(c.type === 'text' && c.containerId)) {
       for (const [prop, key] of STYLE_PROPS) if (e[prop] !== c[prop]) style[key] = e[prop]
@@ -294,11 +302,14 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
         const shape = shapeOf(ex, el)
         // A cylinder's own element is a rectangle, but that doesn't make it one.
         if (shape !== el.shape && el.shape !== 'cylinder' && shapes.includes(shape)) set.shape = shape
-        const resized = !near(ex.width, c.width) || !near(ex.height, c.height)
-        if (resized) set.size = { w: r2(ex.width), h: r2(ex.height) }
+        // A cylinder's own element only covers its middle; its outline has the whole box.
+        const outline = el.shape === 'cylinder' ? el.id + CYLINDER_PARTS[0] : el.id
+        const [now, was] = [liveById.get(outline) ?? ex, compiledById.get(outline) ?? c]
+        const resized = !near(now.width, was.width) || !near(now.height, was.height)
+        if (resized) set.size = { w: r2(now.width), h: r2(now.height) }
         // Relative placement is centred on the anchor, so a resize must pin the node or it would jump.
-        if (!near(ex.x, c.x) || !near(ex.y, c.y) || (resized && el.at?.kind !== 'at')) {
-          set.at = { kind: 'at', x: r2(ex.x), y: r2(ex.y) }
+        if (!near(now.x, was.x) || !near(now.y, was.y) || (resized && el.at?.kind !== 'at')) {
+          set.at = { kind: 'at', x: r2(now.x), y: r2(now.y) }
         }
         if (el.shape === 'cylinder') {
           // The outline shows the cylinder's style; its own rectangle is invisible.
@@ -307,7 +318,7 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
           if (ex.seed !== c.seed) hints.seed = ex.seed
         } else styleHintDiff(ex, c, style, hints)
         const label = labelOf.get(el.id)
-        if ((label?.text ?? '') !== el.label) set.label = label?.text ?? ''
+        if (textOf(label) !== el.label) set.label = textOf(label)
         if (label) fontDiff(label, compiledById.get(el.id + LABEL_SUFFIX) ?? defaultFont(board, el), style, hints)
         break
       }
@@ -449,7 +460,7 @@ function newElement(
     case 'rectangle':
     case 'ellipse':
     case 'diamond':
-      return { ...common, kind: 'node', label: label?.text ?? '', shape: shapeOf(ex), at, size: { w: r2(ex.width), h: r2(ex.height) } }
+      return { ...common, kind: 'node', label: textOf(label), shape: shapeOf(ex), at, size: { w: r2(ex.width), h: r2(ex.height) } }
     case 'text':
       return { ...common, kind: 'text', text: ex.text ?? '', at }
     case 'arrow':

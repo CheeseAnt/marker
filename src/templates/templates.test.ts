@@ -178,7 +178,7 @@ describe('editing copies on the canvas', () => {
 
   it('keeps text and style edits on parts as overrides, including nested parts', () => {
     const { ops } = edit((s) => {
-      byId(s, 'web1/box~label').text = 'Primary'
+      Object.assign(byId(s, 'web1/box~label'), { text: 'Primary', originalText: 'Primary' })
       byId(s, 'web1/disk1/d').strokeColor = '#e03131'
     })
     expect(ops).toEqual([
