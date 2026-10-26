@@ -329,6 +329,21 @@ group g1 [api, db]
     expect(again).toEqual([])
   })
 
+  it('reads its position from the outline wherever Excalidraw has moved the first point', () => {
+    // Excalidraw moves a line's x and y to its first point, which is at the bottom-left of the body.
+    const rebase = (s: Scene) => {
+      const body = byId(s, 'db~body')
+      const [dx, dy] = body.points![0]
+      Object.assign(body, { x: body.x + dx, y: body.y + dy, points: body.points!.map(([x, y]) => [x - dx, y - dy] as const) })
+    }
+    expect(editScene(cyl, rebase).ops).toEqual([])
+    const { ops } = editScene(cyl, (s) => {
+      rebase(s)
+      for (const e of s) if (e.groupIds.includes('db')) e.x += 40
+    })
+    expect(ops).toEqual([{ op: 'update', id: 'db', set: { at: { kind: 'at', x: 40, y: 200 } } }])
+  })
+
   it('removes the node when its parts are deleted', () => {
     const { ops } = editScene(cyl, (s) => {
       for (const e of s) if (e.groupIds.includes('db')) e.isDeleted = true

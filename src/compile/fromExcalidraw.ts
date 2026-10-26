@@ -30,6 +30,13 @@ const r2 = (n: number) => {
 }
 const near = (a: number | undefined, b: number | undefined) => Math.abs((a ?? 0) - (b ?? 0)) <= EPS
 
+/**
+ * Top-left corner of what an element covers. Excalidraw moves a line's x and y to its first
+ * point and its points with them, so a line's corner comes from its points, not its x and y.
+ */
+const topLeft = (e: ExElement) =>
+  e.points?.length ? { x: e.x + Math.min(...e.points.map((p) => p[0])), y: e.y + Math.min(...e.points.map((p) => p[1])) } : { x: e.x, y: e.y }
+
 const STYLE_PROPS = [
   ['strokeColor', 'stroke'],
   ['backgroundColor', 'fill'],
@@ -307,9 +314,10 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
         const [now, was] = [liveById.get(outline) ?? ex, compiledById.get(outline) ?? c]
         const resized = !near(now.width, was.width) || !near(now.height, was.height)
         if (resized) set.size = { w: r2(now.width), h: r2(now.height) }
+        const [nowAt, wasAt] = [topLeft(now), topLeft(was)]
         // Relative placement is centred on the anchor, so a resize must pin the node or it would jump.
-        if (!near(now.x, was.x) || !near(now.y, was.y) || (resized && el.at?.kind !== 'at')) {
-          set.at = { kind: 'at', x: r2(now.x), y: r2(now.y) }
+        if (!near(nowAt.x, wasAt.x) || !near(nowAt.y, wasAt.y) || (resized && el.at?.kind !== 'at')) {
+          set.at = { kind: 'at', x: r2(nowAt.x), y: r2(nowAt.y) }
         }
         if (el.shape === 'cylinder') {
           // The outline shows the cylinder's style; its own rectangle is invisible.
