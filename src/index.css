@@ -153,6 +153,33 @@ button {
   opacity: 0.55;
 }
 
+/* On a template copy with a newer version: sits on its top-right corner. */
+.update-badge {
+  position: absolute;
+  transform: translate(-70%, -60%);
+  pointer-events: auto;
+  padding: 0.125rem 0.5rem;
+  font: inherit;
+  font-size: var(--step--1);
+  white-space: nowrap;
+  color: var(--marker-blue-deep);
+  background: var(--surface);
+  border: 1.5px solid var(--marker-blue);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgb(var(--shadow) / 0.15);
+  cursor: pointer;
+}
+
+.update-badge:hover {
+  color: var(--on-marker);
+  background: var(--marker-blue);
+}
+
+.update-badge:focus-visible {
+  outline: 2px solid var(--marker-blue);
+  outline-offset: 2px;
+}
+
 /* Changes from a request get a passing stroke of blue marker. */
 .change-highlights {
   position: absolute;

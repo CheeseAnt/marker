@@ -4,13 +4,11 @@ import { useBoard } from '../state/board'
 import { canvasSelection, highlightAfterRender, viewportCenter } from '../state/canvasBridge'
 import { useToast } from '../state/toast'
 import { latestVersion, useLibrary, type LibraryEntry } from '../templates/library'
-import { collectDefinitions, insertCopyOps, updateCopiesOps, type TemplateVersion } from '../templates/operations'
+import { collectDefinitions, insertCopyOps, type TemplateVersion } from '../templates/operations'
+import { list, updateCopies } from '../templates/actions'
 import { TemplatePreview } from './TemplatePreview'
 import { exportLibrary, LibraryFileError, parseLibraryFile } from '../templates/libraryFile'
 
-function list(names: string[]): string {
-  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
-}
 
 function addToBoard(t: TemplateVersion) {
   const { board, apply } = useBoard.getState()
@@ -28,21 +26,11 @@ function addToBoard(t: TemplateVersion) {
   highlightAfterRender([id])
 }
 
-function updateCopies(t: TemplateVersion) {
-  const { board, apply } = useBoard.getState()
-  const report = updateCopiesOps(board, t)
-  apply(report.ops, 'manual', { title: `Updated ${report.copies.length === 1 ? 'a copy' : `${report.copies.length} copies`} of “${t.name}” to version ${t.version}` })
-  highlightAfterRender(report.copies)
-  if (report.dropped.length) {
-    useToast.getState().show({ kind: 'error', text: `Version ${t.version} has no place for: ${list(report.dropped)}. Undo to keep the old version.` })
-  }
-}
-
 function Entry({ entry, copies }: { entry: LibraryEntry; copies: InstanceElement[] }) {
   const latest = latestVersion(entry)
   const spec = latest.board.template!
   const [confirming, setConfirming] = useState(false)
-  const outdated = copies.filter((c) => c.template !== templateKey(entry.name, latest.version))
+  const outdated = copies.filter((c) => parseTemplateKey(c.template).version < latest.version)
   return (
     <li className="template-entry">
       <TemplatePreview cacheKey={templateKey(entry.name, latest.version)} board={latest.board} />

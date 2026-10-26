@@ -64,11 +64,12 @@ export interface UpdateReport {
   dropped: string[]
 }
 
-/** Moves every copy of `t.name` on the board to version `t.version`. */
-export function updateCopiesOps(board: Board, t: TemplateVersion): UpdateReport {
+/** Moves every copy of `t.name` on the board (or just those in `ids`) to version `t.version`. */
+export function updateCopiesOps(board: Board, t: TemplateVersion, ids?: Id[]): UpdateReport {
   const key = templateKey(t.name, t.version)
   const copies = board.elements.filter(
-    (e): e is InstanceElement => e.kind === 'instance' && e.template.startsWith(`${t.name}@`) && e.template !== key,
+    (e): e is InstanceElement =>
+      e.kind === 'instance' && e.template.startsWith(`${t.name}@`) && e.template !== key && (!ids || ids.includes(e.id)),
   )
   const ops = definitionOps(board, t)
   const spec = t.board.template!

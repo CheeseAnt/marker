@@ -80,4 +80,14 @@ describe('copies and versions', () => {
     expect((next.elements.find((e) => e.id === 'server1') as InstanceElement).template).toBe('server@2')
     expect(Object.keys(next.definitions)).toEqual(['server@2'])
   })
+
+  it('updates only the copies asked for', () => {
+    let b = commit(board, insertCopyOps(board, v1)).board
+    b = commit(b, insertCopyOps(b, v1)).board
+    const v2 = { name: 'server', version: 2, board: v1.board }
+    const report = updateCopiesOps(b, v2, ['server2'])
+    expect(report.copies).toEqual(['server2'])
+    const next = commit(b, report.ops).board
+    expect(next.elements.filter((e) => e.kind === 'instance').map((e) => (e as InstanceElement).template)).toEqual(['server@1', 'server@2'])
+  })
 })
