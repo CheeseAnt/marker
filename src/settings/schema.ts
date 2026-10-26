@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { priceSchema } from '../usage/pricing'
 
 export const azureFoundrySettings = z.object({
   endpoint: z.string().default(''),
@@ -31,6 +32,10 @@ export const settingsSchema = z.object({
   voice: voiceSettings.prefault({}),
   shortcuts: shortcutSettings.prefault({}),
   jobConcurrency: z.number().int().min(1).max(8).default(2),
+  /** Prices per deployment name, overriding the defaults for known models. */
+  pricing: z.record(z.string(), priceSchema).default({}),
+  /** Monthly spending in US dollars: a warning, and a limit that stops new requests. 0 means none. */
+  budget: z.object({ warnAt: z.number().min(0).default(0), limit: z.number().min(0).default(0) }).prefault({}),
 })
 
 export type Settings = z.infer<typeof settingsSchema>

@@ -11,6 +11,7 @@ import { SaveTemplateDialog } from './SaveTemplateDialog'
 import { canvasSelection } from '../state/canvasBridge'
 import { useToast } from '../state/toast'
 import { useLibrary } from '../templates/library'
+import { useUsage } from '../usage/ledger'
 import type { Id } from '../model/types'
 import { StatusBar } from './StatusBar'
 
@@ -29,6 +30,7 @@ export default function App() {
 
   useEffect(() => {
     void useLibrary.getState().load()
+    void useUsage.getState().load()
   }, [])
   const onError = useCallback((message: string) => setNotice(message), [])
 
@@ -75,7 +77,7 @@ export default function App() {
         {loaded && <BoardCanvas onError={onError} />}
         <ToastSlot />
       </main>
-      {drawer && <Drawer view={drawer} onSaveSelection={saveSelection} />}
+      {drawer && <Drawer view={drawer} onSaveSelection={saveSelection} onOpenSettings={() => setSettingsOpen(true)} />}
       <PromptBar onOpenSettings={() => setSettingsOpen(true)} />
       <StatusBar
         notice={notice}

@@ -12,6 +12,10 @@ import { useSettings } from '../settings/store'
 import { useBoard, type ChangeSource } from '../state/board'
 import { highlightAfterRender, type Viewport } from '../state/canvasBridge'
 import { useToast } from '../state/toast'
+import { monthStart, since, totals } from '../usage/aggregate'
+import { formatUsd } from '../usage/format'
+import { useUsage } from '../usage/ledger'
+import { meterProvider } from '../usage/meter'
 
 export type JobStage = 'queued' | EditStage | 'done' | 'answered' | 'failed' | 'cancelled'
 
@@ -37,6 +41,8 @@ export interface Job {
   txId?: string
   /** Set once the request has been redone because the board changed underneath it. */
   redone?: boolean
+  /** The user chose to send it even though the monthly limit was reached. */
+  overBudgetOk?: boolean
 }
 
 export interface AttachmentRef {
@@ -51,13 +57,12 @@ const KEEP_FINISHED = 20
 
 interface QueueState {
   jobs: Job[]
-  /** Remote usage since the page loaded. The persistent ledger arrives in phase 9. */
-  session: Usage
-  /** Adds usage from work outside requests, such as remote transcription. */
-  recordUsage: (usage: Usage) => void
-  submit: (prompt: string, opts?: { source?: Job['source']; selection?: Id[]; attachments?: AttachmentRef[]; viewport?: Viewport }) => string
+  submit: (
+    prompt: string,
+    opts?: { source?: Job['source']; selection?: Id[]; attachments?: AttachmentRef[]; viewport?: Viewport; overBudgetOk?: boolean },
+  ) => string
   cancel: (id: string) => void
-  retry: (id: string) => void
+  retry: (id: string, opts?: { overBudgetOk?: boolean }) => void
   clearFinished: () => void
 }
 
@@ -80,11 +85,6 @@ export const useJobs = create<QueueState>((set, get) => {
     pump()
   }
 
-  const addUsage = (usage: Usage) => {
-    const s = get().session
-    set({ session: { inputTokens: s.inputTokens + usage.inputTokens, outputTokens: s.outputTokens + usage.outputTokens } })
-  }
-
   /**
    * Starts waiting requests, up to the concurrency setting. Applying is synchronous, so changes
    * still land one at a time; a request whose changes no longer fit is redone once (see run).
@@ -103,15 +103,27 @@ export const useJobs = create<QueueState>((set, get) => {
   const run = async (job: Job) => {
     const controller = new AbortController()
     controllers.set(job.id, controller)
-    patch(job.id, { stage: 'thinking', startedAt: Date.now() })
     const { settings, secrets } = useSettings.getState()
+    const over = overBudget(settings.budget.limit)
+    if (over && !job.overBudgetOk) {
+      useToast.getState().show({
+        kind: 'error',
+        text: `This month's spending (${formatUsd(over)}) has reached your limit of ${formatUsd(settings.budget.limit)}. Change it in Settings, or send this request anyway.`,
+        prompt: job.prompt,
+        action: { label: 'Send anyway', run: () => get().retry(job.id, { overBudgetOk: true }) },
+      })
+      controllers.delete(job.id)
+      return finish(job.id, { stage: 'failed', error: 'Not sent: the monthly spending limit is reached.' })
+    }
+    patch(job.id, { stage: 'thinking', startedAt: Date.now() })
+    const provider = meterProvider(createProvider(settings, secrets), { deployment: settings.providers[settings.activeProvider].deployment, jobId: job.id })
     try {
       const attachments = await resolveAttachments(job)
       const result = await runEdit({
         attachments,
         viewport: job.viewport,
         prompt: job.prompt,
-        provider: createProvider(settings, secrets),
+        provider,
         getBoard: () => useBoard.getState().board,
         getHistory: () => useBoard.getState().history,
         selection: job.selection,
@@ -120,7 +132,7 @@ export const useJobs = create<QueueState>((set, get) => {
         signal: controller.signal,
         onStage: (stage, { outputTokens, repair }) => patch(job.id, { stage, outputTokens, repair }),
       })
-      addUsage(result.usage)
+      warnIfOverBudget()
       const usage = sumUsage(get().jobs.find((j) => j.id === job.id)?.usage, result.usage)
       patch(job.id, { usage })
       if (controller.signal.aborted) return finish(job.id, { stage: 'cancelled', usage })
@@ -167,7 +179,6 @@ export const useJobs = create<QueueState>((set, get) => {
   return {
     jobs: [],
     session: { inputTokens: 0, outputTokens: 0 },
-    recordUsage: (usage) => addUsage(usage),
     submit: (prompt, opts = {}) => {
       const id = `job-${Date.now().toString(36)}-${(counter++).toString(36)}`
       const job: Job = {
@@ -177,6 +188,7 @@ export const useJobs = create<QueueState>((set, get) => {
         selection: opts.selection ?? [],
         attachments: opts.attachments ?? [],
         ...(opts.viewport && { viewport: opts.viewport }),
+        ...(opts.overBudgetOk && { overBudgetOk: true }),
         stage: 'queued',
         createdAt: Date.now(),
         outputTokens: 0,
@@ -192,9 +204,10 @@ export const useJobs = create<QueueState>((set, get) => {
       if (job.stage === 'queued') return finish(id, { stage: 'cancelled' })
       controllers.get(id)?.abort()
     },
-    retry: (id) => {
+    retry: (id, opts = {}) => {
       const job = get().jobs.find((j) => j.id === id)
-      if (job) get().submit(job.prompt, { source: job.source, selection: job.selection, attachments: job.attachments, viewport: job.viewport })
+      if (!job) return
+      get().submit(job.prompt, { source: job.source, selection: job.selection, attachments: job.attachments, viewport: job.viewport, overBudgetOk: opts.overBudgetOk })
     },
     clearFinished: () => {
       set({ jobs: get().jobs.filter(isPending) })
@@ -215,6 +228,25 @@ async function resolveAttachments(job: Job): Promise<Attachment[]> {
     if (asset) out.push({ assetId: asset.id, label: ref.label, dataURL: asset.dataURL, width: asset.width, height: asset.height })
   }
   return out
+}
+
+/** This month's spending, if it has reached `limit` (0 means no limit). */
+function overBudget(limit: number): number | undefined {
+  if (!limit) return undefined
+  const spent = totals(since(useUsage.getState().records, monthStart(Date.now()))).cost
+  return spent >= limit ? spent : undefined
+}
+
+let warnedMonth = -1
+/** Warns once a month when spending passes the warning amount. */
+function warnIfOverBudget() {
+  const { warnAt } = useSettings.getState().settings.budget
+  const month = monthStart(Date.now())
+  if (!warnAt || warnedMonth === month) return
+  const spent = totals(since(useUsage.getState().records, month)).cost
+  if (spent < warnAt) return
+  warnedMonth = month
+  useToast.getState().show({ kind: 'reply', text: `This month's spending has passed ${formatUsd(warnAt)}: ${formatUsd(spent)} so far.` })
 }
 
 const CHANGED_WHILE_RUNNING = 'The board changed while this request was running, so its changes no longer fit. Try it again.'

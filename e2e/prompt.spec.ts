@@ -45,7 +45,7 @@ test('a typed request edits the board as one undoable step', async ({ page }) =>
   expect(state.history.past.at(-1)).toMatchObject({ title: 'Added a cache beside the API', prompt: 'add a yellow cache to the right of it', source: 'ai' })
   expect(String((bodies[0].messages as { content: string }[])[1].content)).toContain('Selected: api')
   await expect(page.getByLabel('Describe a change to the board')).toHaveValue('')
-  await expect(page.getByText('tokens this session')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^This session: / })).toBeVisible()
   await page.screenshot({ path: 'e2e/screenshots/prompt-done.png' })
 
   // The history panel shows the request in handwriting above the title.

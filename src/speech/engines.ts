@@ -1,5 +1,5 @@
 import { createProvider } from '../ai/providers'
-import type { Usage } from '../ai/providers/types'
+import type { LLMProvider } from '../ai/providers/types'
 import type { Secrets, Settings } from '../settings/schema'
 import { speechModel } from './models'
 import { onDevice, type LoadProgress } from './onDevice'
@@ -25,10 +25,10 @@ export interface VoiceEngine {
 
 export type EngineChoice = { engine: VoiceEngine } | { unavailable: string }
 
-/** Where usage from remote transcription is reported. */
-export type UsageSink = (usage: Usage | undefined, audioSeconds: number) => void
+/** Lets the caller wrap the provider used for remote transcription, e.g. to meter its usage. */
+export type ProviderWrapper = (provider: LLMProvider) => LLMProvider
 
-export function createVoiceEngine(settings: Settings, secrets: Secrets, reportUsage: UsageSink): EngineChoice {
+export function createVoiceEngine(settings: Settings, secrets: Secrets, wrap: ProviderWrapper = (p) => p): EngineChoice {
   const voice = settings.voice
   switch (voice.mode) {
     case 'off':
@@ -37,7 +37,7 @@ export function createVoiceEngine(settings: Settings, secrets: Secrets, reportUs
       if (!webSpeechAvailable()) return { unavailable: 'This browser has no built-in speech recognition. Choose on-device in Settings.' }
       return { engine: { label: 'Browser speech', begin: startWebSpeech } }
     case 'remote': {
-      const provider = createProvider(settings, secrets)
+      const provider = wrap(createProvider(settings, secrets))
       if (!provider.transcribe) {
         return { unavailable: 'Remote voice needs a transcription deployment. Add one in Settings, or use on-device voice.' }
       }
@@ -51,9 +51,7 @@ export function createVoiceEngine(settings: Settings, secrets: Secrets, reportUs
               end: async () => {
                 const audio = await recording.stop()
                 if (audio.length < SPEECH_SAMPLE_RATE / 4) return ''
-                const result = await transcribe(encodeWav(audio, SPEECH_SAMPLE_RATE))
-                reportUsage(result.usage, result.audioSeconds)
-                return result.text
+                return (await transcribe(encodeWav(audio, SPEECH_SAMPLE_RATE))).text
               },
               cancel: recording.cancel,
               level: recording.level,

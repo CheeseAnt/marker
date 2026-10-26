@@ -83,17 +83,16 @@ describe('Azure transcription', () => {
 
 describe('voice engines', () => {
   const base = settingsSchema.parse({})
-  const noUsage = () => {}
 
   it('explains why voice is unavailable', () => {
-    expect(createVoiceEngine({ ...base, voice: { ...base.voice, mode: 'off' } }, {}, noUsage)).toEqual({ unavailable: expect.stringMatching(/off/) })
-    expect(createVoiceEngine({ ...base, voice: { ...base.voice, mode: 'remote' } }, {}, noUsage)).toEqual({
+    expect(createVoiceEngine({ ...base, voice: { ...base.voice, mode: 'off' } }, {})).toEqual({ unavailable: expect.stringMatching(/off/) })
+    expect(createVoiceEngine({ ...base, voice: { ...base.voice, mode: 'remote' } }, {})).toEqual({
       unavailable: expect.stringMatching(/transcription deployment/),
     })
   })
 
   it('uses the chosen on-device model', () => {
-    const choice = createVoiceEngine({ ...base, voice: { ...base.voice, onDeviceModel: 'whisper-base.en' } }, {}, noUsage)
+    const choice = createVoiceEngine({ ...base, voice: { ...base.voice, onDeviceModel: 'whisper-base.en' } }, {})
     expect('engine' in choice && choice.engine.label).toBe('Whisper base')
   })
 })

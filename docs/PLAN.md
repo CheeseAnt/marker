@@ -456,6 +456,19 @@ recording → transcribing → queued → building context → calling model →
 - **Queue panel:** opened from the strip's request summary ("Working out “…” 4 s, 120 tokens, 2 more"). It lists working requests (with a sweeping marker progress stroke), waiting ones and finished ones (title, reply or error; time, duration, tokens; Spoken), with Cancel, Try again and Clear finished.
 - **Placement fix (requested):** requests carry the visible area. Unconnected new elements are centred in the view, at the nearest free spot (ring search), instead of right of the board or at (0,0). Images without a place or selection are centred too, and the model is told the visible bounds and centre.
 
+**Phase 9: usage and cost (done, 2026-10-26)**
+- **Ledger:** IndexedDB store `boardbot-usage/records`, one record per remote call: chat (each correction round separately), connection tests, and remote transcription. Each holds the deployment, the reported model, job id, input / cached input / output tokens, audio seconds, and the cost in USD worked out when the call was made. `meterProvider()` wraps any provider; a cancelled call records estimated tokens (request size / 4, plus what had streamed), flagged `estimated`.
+- **Prices:**
+  - `settings.pricing[deployment]` stores $/1M input, cached input and output, plus $/minute of audio;
+  - defaults cover known families (gpt-4o, 4o-mini, 4.1, 4.1-mini, 4.1-nano, 5, 5-mini, 5-nano, o4-mini, the transcribe models, whisper), matched by exact family or `family-<suffix>`. `gpt-5.6-luna` deliberately matches nothing, so it isn't costed at another model's price.
+  - Cached input is billed at its own rate; audio priced per minute is billed by length.
+- **Budget:** `settings.budget.warnAt` (a once-a-month warning) and `limit` (new requests fail with a "Send anyway" action that re-submits with `overBudgetOk`).
+- **UI:**
+  - the status strip shows "This session: N tokens, $X" ("at least" when some calls are unpriced) and opens the Usage tab;
+  - the Usage tab has tiles (session, today, month), the budget bar, a 30-day column chart (cost, or tokens when unpriced; single series in marker blue, validated with the dataviz palette checker; hover tooltip; table view), a this-month table by deployment, CSV export and Clear;
+  - Settings → Costs edits prices per deployment (the chat and transcription deployments, plus anything in the ledger) and the budget;
+  - the queue panel shows each request's cost.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

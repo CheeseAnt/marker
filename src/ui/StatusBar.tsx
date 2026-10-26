@@ -39,7 +39,7 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onO
       ) : null}
       <JobStatus />
       <span className="spacer" />
-      <SessionUsage />
+      <SessionUsage onOpen={() => onToggleDrawer('usage')} />
       <span>{count === 1 ? '1 element' : `${count} elements`}</span>
       <button type="button" className="status-link" onClick={onOpenSettings}>
         Settings

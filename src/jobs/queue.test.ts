@@ -34,6 +34,8 @@ vi.mock('../compile/layout', async (original) => {
 })
 
 const { useJobs } = await import('./queue')
+const { useUsage } = await import('../usage/ledger')
+const { totals } = await import('../usage/aggregate')
 
 const edit = (summary: string, ops: unknown[]) => ({ toolCalls: [{ id: 'c', name: 'edit_board', arguments: JSON.stringify({ summary, ops }) }] })
 const tick = () => new Promise((r) => setTimeout(r, 0))
@@ -45,7 +47,8 @@ const promptOf = (i: number) => {
 
 beforeEach(() => {
   calls.length = 0
-  useJobs.setState({ jobs: [], session: { inputTokens: 0, outputTokens: 0 } })
+  useJobs.setState({ jobs: [] })
+  useUsage.setState({ records: [] })
   useBoard.getState().load(parseBoard('board "q" v1\nnode x "X" rect at(0,0)\nnode y "Y" rect at(300,0)\n'))
 })
 
@@ -65,7 +68,7 @@ describe('job queue', () => {
     calls[2].answer(edit('Coloured x', [{ op: 'update', id: 'x', style: { fill: '#ffec99' } }]))
     await vi.waitFor(() => expect(stages()).toEqual(['done', 'done', 'done']))
     expect(useBoard.getState().history.past.map((t) => t.title)).toEqual(['Renamed y', 'Renamed x', 'Coloured x'])
-    expect(useJobs.getState().session).toEqual({ inputTokens: 30, outputTokens: 6 })
+    expect(totals(useUsage.getState().records)).toMatchObject({ calls: 3, inputTokens: 30, outputTokens: 6 })
   })
 
   it('tells the model when an earlier change removed what it was editing', async () => {
@@ -116,5 +119,23 @@ describe('job queue', () => {
     await vi.waitFor(() => expect(stages()[0]).toBe('cancelled'))
     useJobs.getState().clearFinished()
     expect(stages()).toEqual(['thinking'])
+  })
+
+  it('holds requests back once the monthly limit is reached, unless the user sends anyway', async () => {
+    const { useSettings } = await import('../settings/store')
+    const { useToast } = await import('../state/toast')
+    useSettings.getState().update((st) => ({ ...st, budget: { warnAt: 0, limit: 0.01 } }))
+    useUsage.getState().add({ ts: Date.now(), kind: 'chat', provider: 'x', deployment: 'd', inputTokens: 1, outputTokens: 1, cost: 0.02 })
+    useJobs.getState().submit('expensive')
+    await tick()
+    expect(stages()).toEqual(['failed'])
+    expect(calls).toHaveLength(0)
+    const toast = useToast.getState().toast!
+    expect(toast.text).toMatch(/This month's spending \(\$0.02\) has reached your limit of \$0.01/)
+    toast.action!.run()
+    await tick()
+    expect(stages()).toEqual(['failed', 'thinking'])
+    expect(calls).toHaveLength(1)
+    useSettings.getState().update((st) => ({ ...st, budget: { warnAt: 0, limit: 0 } }))
   })
 })

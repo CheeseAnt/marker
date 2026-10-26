@@ -8,9 +8,10 @@ import App from './ui/App.tsx'
 import { useBoard } from './state/board'
 import { useJobs } from './jobs/queue'
 import { useVoice } from './speech/voice'
+import { useUsage } from './usage/ledger'
 
 // Lets end-to-end tests read the board without poking at canvas pixels.
-if (import.meta.env.DEV) Object.assign(window, { __boardbot: { useBoard, useJobs, useVoice } })
+if (import.meta.env.DEV) Object.assign(window, { __boardbot: { useBoard, useJobs, useVoice, useUsage } })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

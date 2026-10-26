@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useJobs } from '../jobs/queue'
+import { meterProvider } from '../usage/meter'
 import { useSettings } from '../settings/store'
 import { useToast } from '../state/toast'
 import { createVoiceEngine, type VoiceSession } from './engines'
@@ -48,9 +48,10 @@ export function onTranscript(listener: (text: string) => void): () => void {
 
 function engine() {
   const { settings, secrets } = useSettings.getState()
-  return createVoiceEngine(settings, secrets, (usage) => {
-    if (usage) useJobs.getState().recordUsage(usage)
-  })
+  const azure = settings.providers['azure-foundry']
+  return createVoiceEngine(settings, secrets, (provider) =>
+    meterProvider(provider, { deployment: azure.deployment, transcriptionDeployment: azure.transcriptionDeployment }),
+  )
 }
 
 function fail(message: string) {

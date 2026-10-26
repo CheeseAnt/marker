@@ -5,6 +5,8 @@ import { ProviderError, type ConnectionReport } from '../ai/providers/types'
 import type { Settings } from '../settings/schema'
 import { useSettings } from '../settings/store'
 import { VoiceSettings } from './VoiceSettings'
+import { CostSettings } from './CostSettings'
+import { meterProvider } from '../usage/meter'
 
 type Azure = Settings['providers']['azure-foundry']
 
@@ -34,6 +36,8 @@ export function SettingsDialog({ open, onClose }: Props) {
   const [azure, setAzure] = useState<Azure>(saved.providers['azure-foundry'])
   const [voice, setVoice] = useState(saved.voice)
   const [shortcuts, setShortcuts] = useState(saved.shortcuts)
+  const [pricing, setPricing] = useState(saved.pricing)
+  const [budget, setBudget] = useState(saved.budget)
   const [apiKey, setApiKey] = useState(savedKey)
   const [showKey, setShowKey] = useState(false)
   const [test, setTest] = useState<TestState>({ kind: 'idle' })
@@ -48,6 +52,8 @@ export function SettingsDialog({ open, onClose }: Props) {
       setAzure(useSettings.getState().settings.providers['azure-foundry'])
       setVoice(useSettings.getState().settings.voice)
       setShortcuts(useSettings.getState().settings.shortcuts)
+      setPricing(useSettings.getState().settings.pricing)
+      setBudget(useSettings.getState().settings.budget)
       setApiKey(useSettings.getState().secrets['azure-foundry']?.apiKey ?? '')
       setShowKey(false)
       setTest({ kind: 'idle' })
@@ -77,7 +83,7 @@ export function SettingsDialog({ open, onClose }: Props) {
     }))
   }
 
-  const draftSettings = (): Settings => ({ ...saved, voice, shortcuts, providers: { ...saved.providers, 'azure-foundry': azure } })
+  const draftSettings = (): Settings => ({ ...saved, voice, shortcuts, pricing, budget, providers: { ...saved.providers, 'azure-foundry': azure } })
 
   const runTest = async () => {
     abort.current?.abort()
@@ -85,7 +91,7 @@ export function SettingsDialog({ open, onClose }: Props) {
     abort.current = controller
     setTest({ kind: 'running' })
     try {
-      const provider = createProvider(draftSettings(), { 'azure-foundry': { apiKey } })
+      const provider = meterProvider(createProvider(draftSettings(), { 'azure-foundry': { apiKey } }), { deployment: azure.deployment })
       const report = await provider.testConnection(controller.signal)
       setTest({ kind: 'ok', report })
     } catch (e) {
@@ -232,6 +238,17 @@ export function SettingsDialog({ open, onClose }: Props) {
           onVoice={setVoice}
           onShortcuts={setShortcuts}
           onTranscriptionDeployment={(d) => set('transcriptionDeployment', d)}
+        />
+
+        <CostSettings
+          pricing={pricing}
+          budget={budget}
+          deployments={[
+            { name: azure.deployment.trim(), kind: 'chat' },
+            { name: azure.transcriptionDeployment.trim(), kind: 'transcribe' },
+          ]}
+          onPricing={setPricing}
+          onBudget={setBudget}
         />
 
         <footer className="settings-footer">

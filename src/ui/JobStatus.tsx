@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { isPending, useJobs, type Job, type JobStage } from '../jobs/queue'
+import { since, totals } from '../usage/aggregate'
+import { formatTokens, formatUsd } from '../usage/format'
+import { useUsage } from '../usage/ledger'
 
 const STAGE_LABELS: Partial<Record<JobStage, string>> = {
   queued: 'Waiting',
@@ -9,10 +12,6 @@ const STAGE_LABELS: Partial<Record<JobStage, string>> = {
 }
 
 const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })
-
-function formatTokens(n: number): string {
-  return n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
-}
 
 function snippet(text: string, max = 36): string {
   const clean = text.replace(/\s+/g, ' ').trim()
@@ -51,6 +50,7 @@ function JobRow({ job }: { job: Job }) {
   const pending = isPending(job)
   const working = pending && job.stage !== 'queued'
   const tokens = job.usage ? job.usage.inputTokens + job.usage.outputTokens : 0
+  const spent = totals(useUsage((s) => s.records).filter((r) => r.jobId === job.id))
   return (
     <li className={`queue-row ${job.stage}`}>
       <div className="queue-main">
@@ -62,6 +62,7 @@ function JobRow({ job }: { job: Job }) {
             {job.source === 'voice' ? 'Spoken, ' : ''}
             {time.format(job.finishedAt ?? job.createdAt)}, {elapsed(job)}
             {tokens ? `, ${formatTokens(tokens)} tokens` : ''}
+            {spent.calls > spent.unpriced ? `, ${formatUsd(spent.cost)}` : ''}
           </p>
         )}
       </div>
@@ -168,13 +169,17 @@ export function JobStatus() {
   )
 }
 
-export function SessionUsage() {
-  const session = useJobs((s) => s.session)
-  const total = session.inputTokens + session.outputTokens
-  if (total === 0) return null
+/** This session's usage and cost; opens the usage panel. */
+export function SessionUsage({ onOpen }: { onOpen: () => void }) {
+  const records = useUsage((s) => s.records)
+  const start = useUsage((s) => s.sessionStart)
+  const t = totals(since(records, start))
+  const tokens = t.inputTokens + t.outputTokens
+  if (t.calls === 0) return null
+  const cost = t.unpriced && !t.cost ? '' : `, ${t.unpriced ? 'at least ' : ''}${formatUsd(t.cost)}`
   return (
-    <span title={`${session.inputTokens.toLocaleString()} in, ${session.outputTokens.toLocaleString()} out`}>
-      {formatTokens(total)} tokens this session
-    </span>
+    <button type="button" className="status-link" onClick={onOpen} title={`${t.inputTokens.toLocaleString()} in, ${t.outputTokens.toLocaleString()} out`}>
+      This session: {formatTokens(tokens)} tokens{cost}
+    </button>
   )
 }
