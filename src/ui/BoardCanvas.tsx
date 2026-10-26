@@ -12,6 +12,8 @@ import { OpError } from '../model/apply'
 import { DEFAULT_FONT, FONT_PRESETS, fontPreset, withBoardFont, type FontId } from '../model/fonts'
 import { setPendingEditsFlusher, useBoard } from '../state/board'
 import { registerCanvas } from '../state/canvasBridge'
+import { saveBoard } from '../state/file'
+import { newBoardAfterSaving, openBoardAfterSaving } from '../state/unsaved'
 import { LABEL_SUFFIX } from '../compile/exTypes'
 import { debounce } from '../storage/idb'
 
@@ -336,10 +338,23 @@ function setBoardFont(font: FontId) {
 }
 
 /** Excalidraw's main menu, with the board font presets each shown in their own typeface. */
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl'
+
 function BoardMenu() {
   const current = useBoard((s) => s.board.defaults.font ?? DEFAULT_FONT)
   return (
     <MainMenu>
+      <MainMenu.Item onSelect={() => void newBoardAfterSaving()}>New board</MainMenu.Item>
+      <MainMenu.Item shortcut={`${MOD}+O`} onSelect={() => void openBoardAfterSaving()}>
+        Open…
+      </MainMenu.Item>
+      <MainMenu.Item shortcut={`${MOD}+S`} onSelect={() => void saveBoard()}>
+        Save
+      </MainMenu.Item>
+      <MainMenu.Item shortcut={`${MOD}+Shift+S`} onSelect={() => void saveBoard({ as: true })}>
+        Save as…
+      </MainMenu.Item>
+      <MainMenu.Separator />
       <MainMenu.Group title="Board font">
         {FONT_PRESETS.map((f) => (
           <MainMenu.Item

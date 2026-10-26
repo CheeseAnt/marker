@@ -363,6 +363,22 @@ button {
   vertical-align: 0.05em;
 }
 
+.file-status.unsaved::before {
+  content: '';
+  display: inline-block;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-right: 0.375rem;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  vertical-align: 0.05em;
+}
+
+.unsaved .settings-section h2 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: var(--step-1);
+}
+
 .voice-status.recording {
   color: var(--marker-red);
   font-weight: 700;

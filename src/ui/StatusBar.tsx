@@ -4,6 +4,7 @@ import { useBoard } from '../state/board'
 import { DRAWER_LABELS, type DrawerView } from './drawerViews'
 import { JobStatus, SessionUsage } from './JobStatus'
 import { VoiceStatus } from './VoiceStatus'
+import { hasUnsavedChanges, saveBoard, useFile } from '../state/file'
 
 interface Props {
   notice: string | null
@@ -40,6 +41,7 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onO
       <JobStatus />
       <span className="spacer" />
       <SessionUsage onOpen={() => onToggleDrawer('usage')} />
+      <FileStatus />
       <span>{count === 1 ? '1 element' : `${count} elements`}</span>
       <button type="button" className="status-link" onClick={onOpenSettings}>
         Settings
@@ -52,5 +54,19 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onO
         ))}
       </div>
     </footer>
+  )
+}
+
+/** The file this board belongs to, and whether it has changes not saved there. Click to save. */
+function FileStatus() {
+  const name = useFile((s) => s.name)
+  const savedHash = useFile((s) => s.savedHash)
+  const board = useBoard((s) => s.board)
+  const unsaved = hasUnsavedChanges(board, savedHash)
+  if (!name && !unsaved) return null
+  return (
+    <button type="button" className={`status-link file-status ${unsaved ? 'unsaved' : ''}`} onClick={() => void saveBoard()} title="Save (Ctrl+S)">
+      {name ? (unsaved ? `${name}, unsaved changes` : name) : 'Not saved to a file'}
+    </button>
   )
 }

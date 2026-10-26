@@ -12,6 +12,9 @@ import { canvasSelection } from '../state/canvasBridge'
 import { useToast } from '../state/toast'
 import { useLibrary } from '../templates/library'
 import { useUsage } from '../usage/ledger'
+import { saveBoard, useFile } from '../state/file'
+import { UnsavedDialog } from './UnsavedDialog'
+import { openBoardAfterSaving } from '../state/unsaved'
 import type { Id } from '../model/types'
 import { StatusBar } from './StatusBar'
 
@@ -31,6 +34,7 @@ export default function App() {
   useEffect(() => {
     void useLibrary.getState().load()
     void useUsage.getState().load()
+    void useFile.getState().load()
   }, [])
   const onError = useCallback((message: string) => setNotice(message), [])
 
@@ -53,6 +57,14 @@ export default function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return
       const key = e.key.toLowerCase()
+      // Saving and opening work everywhere, and take over the browser's (and Excalidraw's) own.
+      if ((key === 's' || key === 'o') && !document.querySelector('dialog[open]')) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        if (key === 's') void saveBoard({ as: e.shiftKey })
+        else if (!e.shiftKey) void openBoardAfterSaving()
+        return
+      }
       const isUndo = key === 'z' && !e.shiftKey
       const isRedo = (key === 'z' && e.shiftKey) || (key === 'y' && !e.shiftKey)
       if (!isUndo && !isRedo) return
@@ -87,6 +99,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <UnsavedDialog />
       <SaveTemplateDialog open={templateSelection !== null} selection={templateSelection ?? []} onClose={() => setTemplateSelection(null)} />
     </div>
   )
