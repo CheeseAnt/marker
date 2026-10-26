@@ -49,6 +49,8 @@ interface QueueState {
   jobs: Job[]
   /** Remote usage since the page loaded. The persistent ledger arrives in phase 9. */
   session: Usage
+  /** Adds usage from work outside requests, such as remote transcription. */
+  recordUsage: (usage: Usage) => void
   submit: (prompt: string, opts?: { source?: Job['source']; selection?: Id[]; attachments?: AttachmentRef[] }) => string
   cancel: (id: string) => void
   retry: (id: string) => void
@@ -144,6 +146,7 @@ export const useJobs = create<QueueState>((set, get) => {
   return {
     jobs: [],
     session: { inputTokens: 0, outputTokens: 0 },
+    recordUsage: (usage) => addUsage(usage),
     submit: (prompt, opts = {}) => {
       const id = `job-${Date.now().toString(36)}-${(counter++).toString(36)}`
       const job: Job = {

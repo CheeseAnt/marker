@@ -4,6 +4,7 @@ import { createProvider, PROVIDER_LABELS } from '../ai/providers'
 import { ProviderError, type ConnectionReport } from '../ai/providers/types'
 import type { Settings } from '../settings/schema'
 import { useSettings } from '../settings/store'
+import { VoiceSettings } from './VoiceSettings'
 
 type Azure = Settings['providers']['azure-foundry']
 
@@ -31,6 +32,8 @@ export function SettingsDialog({ open, onClose }: Props) {
   const saved = useSettings((s) => s.settings)
   const savedKey = useSettings((s) => s.secrets['azure-foundry']?.apiKey ?? '')
   const [azure, setAzure] = useState<Azure>(saved.providers['azure-foundry'])
+  const [voice, setVoice] = useState(saved.voice)
+  const [shortcuts, setShortcuts] = useState(saved.shortcuts)
   const [apiKey, setApiKey] = useState(savedKey)
   const [showKey, setShowKey] = useState(false)
   const [test, setTest] = useState<TestState>({ kind: 'idle' })
@@ -43,6 +46,8 @@ export function SettingsDialog({ open, onClose }: Props) {
     if (!dialog) return
     if (open && !dialog.open) {
       setAzure(useSettings.getState().settings.providers['azure-foundry'])
+      setVoice(useSettings.getState().settings.voice)
+      setShortcuts(useSettings.getState().settings.shortcuts)
       setApiKey(useSettings.getState().secrets['azure-foundry']?.apiKey ?? '')
       setShowKey(false)
       setTest({ kind: 'idle' })
@@ -72,7 +77,7 @@ export function SettingsDialog({ open, onClose }: Props) {
     }))
   }
 
-  const draftSettings = (): Settings => ({ ...saved, providers: { ...saved.providers, 'azure-foundry': azure } })
+  const draftSettings = (): Settings => ({ ...saved, voice, shortcuts, providers: { ...saved.providers, 'azure-foundry': azure } })
 
   const runTest = async () => {
     abort.current?.abort()
@@ -219,6 +224,15 @@ export function SettingsDialog({ open, onClose }: Props) {
             </p>
           </div>
         </section>
+
+        <VoiceSettings
+          voice={voice}
+          shortcuts={shortcuts}
+          transcriptionDeployment={azure.transcriptionDeployment}
+          onVoice={setVoice}
+          onShortcuts={setShortcuts}
+          onTranscriptionDeployment={(d) => set('transcriptionDeployment', d)}
+        />
 
         <footer className="settings-footer">
           <span className="settings-provider-note">Provider: {PROVIDER_LABELS[saved.activeProvider]}</span>

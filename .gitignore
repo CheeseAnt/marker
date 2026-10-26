@@ -26,10 +26,11 @@ dist-ssr
 # graft index cache
 graft/
 
-# copied from node_modules by scripts/copy-excalidraw-fonts.mjs
+# copied from node_modules by scripts/copy-static-assets.mjs
 public/fonts/
 
 # Playwright output
 e2e/screenshots/
 test-results/
 playwright-report/
+public/ort/

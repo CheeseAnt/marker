@@ -437,6 +437,19 @@ recording → transcribing → queued → building context → calling model →
   - embedding asset bytes in saved `.board` / `.boardz` files comes with file save in phase 10 (for now assets live beside the board in IndexedDB);
   - unused assets are never cleaned up yet.
 
+**Phase 7: voice (done, 2026-10-26)**
+- **Engines (`src/speech/`):** one `VoiceEngine` interface, `begin()` returning a session whose `end()` resolves with the text.
+  - **On-device** (default): transformers.js 4.3.1 in a module Web Worker. Choice of Moonshine base (default), Moonshine tiny, Whisper base.en and Whisper small.en. WebGPU uses an fp32 encoder with a q4 decoder; the WASM fallback uses q8. ONNX Runtime is self-hosted from `/ort/`. Models are cached by the browser, with Download now and Delete in Settings.
+  - **Remote:** the provider's `transcribe()` — Azure `…/audio/transcriptions` (api-version 2025-03-01-preview, or v1) on a transcription deployment, with the same key. Its usage counts toward session tokens.
+  - **Browser:** the Web Speech API (Chrome and Edge).
+- **Capture:** `getUserMedia`, an AudioWorklet, then an OfflineAudioContext resample to 16 kHz mono, capped at 60 s, with a smoothed level for the mic ring.
+- **Interaction:** hold Ctrl+Shift+Space (or the mic button) to talk and release to finish; a tap under 300 ms toggles recording on until the next press. The transcript is appended to the prompt bar, or sent straight away with auto-send, and voice requests are recorded with source `voice`.
+  - The status strip shows the engine, model download progress, and recording time.
+  - Settings → Shortcuts records new key combinations and warns about clashes with Excalidraw, browser and OS shortcuts.
+- **Spike C result:** Moonshine tiny on WASM (headless Chromium, no WebGPU) downloaded and loaded in about 3.1 s and transcribed a 2.7 s spoken request in **185 ms**, accurately. On-device is the right default.
+- **Testing:** Chrome's fake microphone plays `e2e/fixtures/speech.wav` (made with macOS `say`). The remote and tap/hold flows are tested with a mocked Azure; the real on-device run is opt-in with `BOARDBOT_SPEECH_E2E=1`, because it downloads the model.
+- **Later:** Whisper's vocabulary prompt from board labels, and Chrome's on-device `processLocally` for browser speech. Vite also emits its own unused 27 MB copy of the ORT WASM file in `dist/`, to trim in phase 10.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

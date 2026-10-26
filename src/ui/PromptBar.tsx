@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { isProviderReady } from '../ai/providers'
 import { imageToAsset } from '../assets/image'
 import { saveAsset, type Asset } from '../assets/store'
 import { isPending, MAX_ATTACHMENTS, useJobs } from '../jobs/queue'
 import { useToast } from '../state/toast'
+import { parseShortcut, matchesShortcut } from '../speech/shortcut'
+import { onTranscript, useVoice } from '../speech/voice'
 import { useSettings } from '../settings/store'
 import { canvasSelection } from '../state/canvasBridge'
 
@@ -48,6 +50,62 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [attached, setAttached] = useState<Attached[]>([])
   const [dropping, setDropping] = useState(false)
   const filePicker = useRef<HTMLInputElement>(null)
+  const voiceOn = useSettings((s) => s.settings.voice.mode !== 'off')
+  const autoSend = useSettings((s) => s.settings.voice.autoSend)
+  const talkKey = useSettings((s) => s.settings.shortcuts.pushToTalk)
+  const voice = useVoice((s) => s.status)
+  const holdMode = useVoice((s) => s.holdMode)
+  const level = useVoice((s) => s.level)
+
+  const send = (prompt: string, source: 'ai' | 'voice') => {
+    if (!ready) return onOpenSettings()
+    if (!prompt.trim()) return
+    // The selection at the moment of sending is what "this" refers to.
+    useJobs.getState().submit(prompt.trim(), {
+      source,
+      selection: canvasSelection(),
+      attachments: attached.map((a) => ({ assetId: a.asset.id, label: a.name })),
+    })
+    setText('')
+    setAttached([])
+  }
+  const sendRef = useRef(send)
+  sendRef.current = send
+
+  // Spoken text joins whatever is already typed; with auto-send it goes straight to the model.
+  useEffect(
+    () =>
+      onTranscript((spoken) => {
+        const combined = [input.current?.value.trim(), spoken].filter(Boolean).join(' ')
+        if (autoSend) sendRef.current(combined, 'voice')
+        else {
+          setText(combined)
+          input.current?.focus()
+        }
+      }),
+    [autoSend],
+  )
+
+  // Push-to-talk works everywhere, including while typing here, so it's a modifier combination.
+  useEffect(() => {
+    const shortcut = parseShortcut(talkKey)
+    if (!shortcut || !voiceOn) return
+    const down = (e: KeyboardEvent) => {
+      if (!matchesShortcut(e, shortcut) || document.querySelector('dialog[open]')) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      if (!e.repeat) useVoice.getState().press()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code === shortcut.key || e.key === shortcut.key) useVoice.getState().release()
+    }
+    window.addEventListener('keydown', down, { capture: true })
+    window.addEventListener('keyup', up, { capture: true })
+    return () => {
+      window.removeEventListener('keydown', down, { capture: true })
+      window.removeEventListener('keyup', up, { capture: true })
+    }
+  }, [talkKey, voiceOn])
 
   const attach = async (files: File[]) => {
     const room = MAX_ATTACHMENTS - attached.length
@@ -99,16 +157,7 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       }}
       onSubmit={(e) => {
         e.preventDefault()
-        if (!ready) return onOpenSettings()
-        const prompt = text.trim()
-        if (!prompt) return
-        // The selection at the moment of sending is what "this" refers to.
-        useJobs.getState().submit(prompt, {
-          selection: canvasSelection(),
-          attachments: attached.map((a) => ({ assetId: a.asset.id, label: a.name })),
-        })
-        setText('')
-        setAttached([])
+        send(text, 'ai')
       }}
     >
       {attached.length > 0 && (
@@ -153,7 +202,15 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
           }}
           aria-label="Describe a change to the board"
           aria-keyshortcuts={focusKey}
-          placeholder="Add a database below the API and connect them"
+          placeholder={
+            voice === 'recording' || voice === 'starting'
+              ? holdMode === 'hold'
+                ? 'Listening… release to finish'
+                : `Listening… press ${talkKey} or the microphone again to finish`
+              : voice === 'transcribing'
+                ? 'Turning speech into text…'
+                : 'Add a database below the API and connect them'
+          }
         />
         {!focused && !text && (
           <kbd className="ledge-shortcut" aria-hidden="true" title={`Press ${focusKey} to write a request`}>
@@ -181,7 +238,32 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       >
         <ClipIcon />
       </button>
-      <button type="button" className="ledge-button icon" disabled aria-label="Speak a change" title="Voice input isn't available yet">
+      <button
+        type="button"
+        className="ledge-button icon mic"
+        data-state={voice}
+        style={{ '--level': level.toFixed(2) } as React.CSSProperties}
+        disabled={!voiceOn || voice === 'transcribing'}
+        aria-label={voice === 'recording' ? 'Stop recording' : 'Speak a change'}
+        aria-pressed={voice === 'recording' || voice === 'starting'}
+        aria-keyshortcuts={talkKey}
+        title={voiceOn ? `Hold to speak, or tap to start and stop (${talkKey})` : 'Voice input is off; turn it on in Settings'}
+        onPointerDown={(e) => {
+          e.preventDefault()
+          useVoice.getState().press()
+        }}
+        onPointerUp={() => useVoice.getState().release()}
+        onPointerLeave={() => useVoice.getState().release()}
+        onKeyDown={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') {
+            e.preventDefault()
+            if (!e.repeat) useVoice.getState().press()
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === ' ' || e.key === 'Enter') useVoice.getState().release()
+        }}
+      >
         <MicIcon />
       </button>
       <button

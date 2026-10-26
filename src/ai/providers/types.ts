@@ -56,6 +56,14 @@ export interface ProviderCapabilities {
   transcription: boolean
 }
 
+export interface Transcription {
+  text: string
+  /** Token counts, for models billed by tokens (e.g. gpt-4o-transcribe). */
+  usage?: Usage
+  /** Audio length, for models billed by the minute (e.g. whisper). */
+  audioSeconds: number
+}
+
 export interface ConnectionReport {
   model?: string
   latencyMs: number
@@ -70,6 +78,8 @@ export interface LLMProvider {
   complete(req: ChatRequest, opts: { signal?: AbortSignal; onProgress?: (p: ChatProgress) => void }): Promise<ChatResult>
   /** Sends a tiny request that needs a tool call, to check the endpoint, key and deployment. */
   testConnection(signal?: AbortSignal): Promise<ConnectionReport>
+  /** Speech to text, when the provider has a transcription model configured. */
+  transcribe?(audio: Blob, signal?: AbortSignal): Promise<Transcription>
 }
 
 export type ProviderErrorKind = 'config' | 'auth' | 'not-found' | 'rate-limit' | 'bad-request' | 'network' | 'server' | 'aborted'

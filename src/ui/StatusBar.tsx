@@ -3,13 +3,7 @@ import { hasApiKey, useSettings } from '../settings/store'
 import { useBoard } from '../state/board'
 import { DRAWER_LABELS, type DrawerView } from './drawerViews'
 import { JobStatus, SessionUsage } from './JobStatus'
-
-const VOICE_LABELS = {
-  'moonshine-base': 'Moonshine base',
-  'moonshine-tiny': 'Moonshine tiny',
-  'whisper-base.en': 'Whisper base',
-  'whisper-small.en': 'Whisper small',
-} as const
+import { VoiceStatus } from './VoiceStatus'
 
 interface Props {
   notice: string | null
@@ -27,11 +21,10 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onO
   const config = settings.providers[provider]
   const ready = isProviderReady(settings, secrets)
   const configured = ready || Boolean(config.endpoint.trim())
-  const voice = settings.voice
 
   return (
     <footer className="status">
-      <span>{voice.mode === 'off' ? 'Voice off' : voice.mode === 'on-device' ? `Voice: ${VOICE_LABELS[voice.onDeviceModel]}` : `Voice: ${voice.mode}`}</span>
+      <VoiceStatus onOpenSettings={onOpenSettings} />
       <button type="button" className={`status-link ${ready ? '' : 'attention'}`} onClick={onOpenSettings} title="Open settings">
         {PROVIDER_LABELS[provider]}
         {ready ? `: ${config.deployment || 'connected'}` : !configured ? ' not set up' : !hasApiKey(secrets, provider) ? ' needs an API key' : ' needs a deployment'}

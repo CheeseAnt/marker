@@ -11,6 +11,10 @@ const isolationHeaders = {
 export default defineConfig({
   plugins: [react()],
   server: { headers: isolationHeaders },
+  // Pre-bundled up front, so the first use of voice doesn't make the dev server reload the page.
+  optimizeDeps: { include: ['@huggingface/transformers'] },
+  // The speech worker uses dynamic imports, which only ES module workers support.
+  worker: { format: 'es' },
   preview: { headers: isolationHeaders },
   test: {
     environment: 'node',

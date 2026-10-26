@@ -310,6 +310,21 @@ button {
   padding: 0;
 }
 
+.ledge-button.mic[data-state='recording'],
+.ledge-button.mic[data-state='starting'] {
+  background: var(--marker-red);
+  border-color: #9f2a22;
+  color: #fff;
+  /* The ring grows with how loudly you speak. */
+  box-shadow: 0 0 0 calc(2px + var(--level, 0) * 8px) rgb(200 55 45 / 0.25);
+}
+
+.ledge-button.mic[data-state='transcribing'] {
+  opacity: 1;
+  color: var(--marker-red);
+  cursor: progress;
+}
+
 .ledge-button:disabled {
   cursor: default;
   opacity: 0.45;
@@ -345,6 +360,22 @@ button {
   margin-right: 0.375rem;
   border-radius: 50%;
   background: #c98a16;
+  vertical-align: 0.05em;
+}
+
+.voice-status.recording {
+  color: var(--marker-red);
+  font-weight: 700;
+}
+
+.voice-status.recording::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.375rem;
+  border-radius: 50%;
+  background: var(--marker-red);
   vertical-align: 0.05em;
 }
 
@@ -523,6 +554,85 @@ button {
 .settings form {
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+/* The footer stays in view while the sections scroll. */
+.settings-footer {
+  position: sticky;
+  bottom: 0;
+  flex-shrink: 0;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid var(--frame-light);
+}
+
+.mode-choice,
+.model-row .choice-check {
+  align-items: flex-start;
+  padding: 0.25rem 0;
+}
+
+.mode-choice input,
+.model-row input {
+  margin-top: 0.2rem;
+}
+
+.model-name {
+  display: block;
+  font-weight: 700;
+  font-size: var(--step--1);
+}
+
+.model-note {
+  display: block;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.model-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.model-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--step--1);
+  padding-top: 0.25rem;
+}
+
+.model-actions button {
+  padding: 0.1875rem 0.625rem;
+  font-size: var(--step--1);
+}
+
+.model-ready {
+  color: var(--marker-green);
+}
+
+.model-progress {
+  font-variant-numeric: tabular-nums;
+}
+
+.field-hint.error {
+  color: var(--marker-red);
+}
+
+.shortcut-capture {
+  min-width: 10rem;
+  text-align: left;
+  font-family: var(--font-code) !important;
+}
+
+.shortcut-capture.recording {
+  border-color: var(--marker-blue) !important;
+  color: var(--marker-blue);
 }
 
 .settings-header {

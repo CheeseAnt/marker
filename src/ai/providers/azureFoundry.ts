@@ -22,6 +22,8 @@ export interface AzureFoundryConfig {
 type Fetch = typeof fetch
 
 const DEFAULT_MAX_OUTPUT = 4096
+// gpt-4o-transcribe needs this version or later on the deployments endpoint; whisper accepts it too.
+const TRANSCRIBE_API_VERSION = '2025-03-01-preview'
 
 function toWireMessage(m: ChatMessage): Record<string, unknown> {
   switch (m.role) {
@@ -224,11 +226,42 @@ export function createAzureFoundryProvider(config: AzureFoundryConfig, fetchImpl
     }
   }
 
+  const transcriptionDeployment = config.transcriptionDeployment?.trim()
+  const transcribe = async (audio: Blob, signal?: AbortSignal) => {
+    const { base, style: resolvedStyle } = validate()
+    // Foundry resources serve the OpenAI audio routes on the same host as chat.
+    const url =
+      resolvedStyle === 'v1'
+        ? `${base}/openai/v1/audio/transcriptions`
+        : `${base}/openai/deployments/${encodeURIComponent(transcriptionDeployment!)}/audio/transcriptions?api-version=${TRANSCRIBE_API_VERSION}`
+    const form = new FormData()
+    form.append('file', audio, 'speech.wav')
+    form.append('response_format', 'json')
+    form.append('language', 'en')
+    if (resolvedStyle === 'v1') form.append('model', transcriptionDeployment!)
+    let res: Response
+    try {
+      res = await fetchImpl(url, { method: 'POST', headers: { 'api-key': config.apiKey.trim() }, body: form, signal })
+    } catch (e) {
+      throw mapFetchError(e, new URL(url).host)
+    }
+    if (!res.ok) throw await errorFromResponse(res, transcriptionDeployment!)
+    const body = (await res.json()) as { text?: string; usage?: { input_tokens?: number; output_tokens?: number } }
+    // A WAV header is 44 bytes; the rest is 16-bit samples at 16 kHz.
+    const audioSeconds = Math.max(0, (audio.size - 44) / 2 / 16_000)
+    return {
+      text: (body.text ?? '').trim(),
+      audioSeconds,
+      ...(body.usage && { usage: { inputTokens: body.usage.input_tokens ?? 0, outputTokens: body.usage.output_tokens ?? 0 } }),
+    }
+  }
+
   return {
     id: 'azure-foundry',
     label: 'Azure AI Foundry',
-    capabilities: { vision: true, tools: true, streaming: true, transcription: Boolean(config.transcriptionDeployment) },
+    capabilities: { vision: true, tools: true, streaming: true, transcription: Boolean(transcriptionDeployment) },
     complete,
     testConnection,
+    ...(transcriptionDeployment && { transcribe }),
   }
 }
