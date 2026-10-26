@@ -7,6 +7,11 @@ import type { DrawerView } from './drawerViews'
 import { PromptBar } from './PromptBar'
 import { SettingsDialog } from './SettingsDialog'
 import { ToastSlot } from './Toast'
+import { SaveTemplateDialog } from './SaveTemplateDialog'
+import { canvasSelection } from '../state/canvasBridge'
+import { useToast } from '../state/toast'
+import { useLibrary } from '../templates/library'
+import type { Id } from '../model/types'
 import { StatusBar } from './StatusBar'
 
 export default function App() {
@@ -14,6 +19,17 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<DrawerView | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // The selection is captured when the dialog opens, since using the dialog can't change it.
+  const [templateSelection, setTemplateSelection] = useState<Id[] | null>(null)
+  const saveSelection = () => {
+    const selection = canvasSelection()
+    if (selection.length) setTemplateSelection(selection)
+    else useToast.getState().show({ kind: 'error', text: 'Select the shapes to save as a template first.' })
+  }
+
+  useEffect(() => {
+    void useLibrary.getState().load()
+  }, [])
   const onError = useCallback((message: string) => setNotice(message), [])
 
   useEffect(() => {
@@ -59,7 +75,7 @@ export default function App() {
         {loaded && <BoardCanvas onError={onError} />}
         <ToastSlot />
       </main>
-      {drawer && <Drawer view={drawer} />}
+      {drawer && <Drawer view={drawer} onSaveSelection={saveSelection} />}
       <PromptBar onOpenSettings={() => setSettingsOpen(true)} />
       <StatusBar
         notice={notice}
@@ -69,6 +85,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SaveTemplateDialog open={templateSelection !== null} selection={templateSelection ?? []} onClose={() => setTemplateSelection(null)} />
     </div>
   )
 }

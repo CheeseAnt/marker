@@ -36,7 +36,7 @@ const path = fc
 
 /** A board whose references (edges, anchors, groups) all point at earlier elements. */
 export const boardArb: fc.Arbitrary<Board> = fc
-  .array(fc.nat({ max: 5 }), { maxLength: 14 })
+  .array(fc.nat({ max: 6 }), { maxLength: 14 })
   .chain((kinds) =>
     fc.tuple(
       fc.constant(kinds),
@@ -75,7 +75,7 @@ export const boardArb: fc.Arbitrary<Board> = fc
         path: string
       }
       const id = `e${i}`
-      const anchors = elements.filter((e) => e.kind === 'node' || e.kind === 'text' || e.kind === 'image')
+      const anchors = elements.filter((e) => e.kind === 'node' || e.kind === 'text' || e.kind === 'image' || e.kind === 'instance')
       const pickAnchor = (n: number) => anchors[n % anchors.length]
       const placement = (): Placement | undefined => {
         if (r.flags[0] && anchors.length) {
@@ -100,8 +100,11 @@ export const boardArb: fc.Arbitrary<Board> = fc
           break
         }
         case 1: {
-          const end = (n: number, asPoint: boolean): Endpoint =>
-            asPoint ? { point: { x: r.x + n, y: r.y } } : { id: pickAnchor(n).id }
+          const end = (n: number, asPoint: boolean): Endpoint => {
+            if (asPoint) return { point: { x: r.x + n, y: r.y } }
+            const target = pickAnchor(n)
+            return target.kind === 'instance' && n % 2 ? { id: target.id, port: 'p' } : { id: target.id }
+          }
           elements.push({
             ...base,
             kind: 'edge',
@@ -124,6 +127,19 @@ export const boardArb: fc.Arbitrary<Board> = fc
         case 4:
           elements.push({ ...base, kind: 'draw', at: { x: r.x, y: r.y }, path: r.path })
           break
+        case 6: {
+          const at = placement()
+          elements.push({
+            ...base,
+            kind: 'instance',
+            template: 'box@1',
+            params: r.flags[2] ? { name: r.label } : {},
+            overrides: r.flags[3] ? { b: { text: r.label, style: { fill: '#c00' } } } : {},
+            ...(at && { at }),
+            ...(r.pick[3] % 3 === 0 && { scale: 1 + (r.pick[2] % 4) / 2 }),
+          })
+          break
+        }
         default: {
           const candidates = elements.filter((e) => !grouped.has(e.id))
           if (candidates.length === 0) break
@@ -134,5 +150,20 @@ export const boardArb: fc.Arbitrary<Board> = fc
         }
       }
     })
-    return { title, formatVersion: 1, defaults: {}, elements }
+    const usesTemplate = elements.some((e) => e.kind === 'instance')
+    const definitions: Board['definitions'] = usesTemplate ? { 'box@1': BOX_TEMPLATE } : {}
+    return { title, formatVersion: 1, defaults: {}, elements, definitions }
   })
+
+/** The one template generated boards use: a labelled box with a port. */
+export const BOX_TEMPLATE: Board = {
+  title: 'Box',
+  formatVersion: 1,
+  defaults: {},
+  template: { name: 'box', description: '', params: [{ name: 'name', default: 'Box' }], ports: [{ name: 'p', target: 'b', side: 'right' }] },
+  elements: [
+    { id: 'b', kind: 'node', label: '{name}', shape: 'rect', at: { kind: 'at', x: 0, y: 0 }, size: { w: 120, h: 60 }, style: {}, hints: {} },
+    { id: 'note', kind: 'text', text: 'v1', at: { kind: 'rel', dir: 'below', of: 'b', gap: 10 }, style: {}, hints: {} },
+  ],
+  definitions: {},
+}

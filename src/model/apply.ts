@@ -1,6 +1,7 @@
 import { resolveBoxes } from './geometry'
 import { FIXED_FIELDS, MERGED_FIELDS, type Op } from './ops'
-import { elementSchema, type Board, type BoardElement, type Id } from './types'
+import { definitionCycle, usedDefinitions } from '../templates/expand'
+import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Id, type InstanceElement } from './types'
 
 export class OpError extends Error {
   readonly issues: string[]
@@ -125,6 +126,23 @@ export function applyOp(board: Board, op: Op): { board: Board; inverse: Op } {
       }
       return { board: next, inverse: { op: 'board', set: prev } }
     }
+    case 'define': {
+      const def = definitionSchema.parse(op.board)
+      const prev = board.definitions[op.key]
+      const { name } = parseTemplateKey(op.key)
+      if (def.template.name !== name) throw new OpError([`definition ${op.key} is for template "${def.template.name}"`])
+      return {
+        board: { ...board, definitions: { ...board.definitions, [op.key]: def } },
+        inverse: prev ? { op: 'define', key: op.key, board: prev as never } : { op: 'undefine', key: op.key },
+      }
+    }
+    case 'undefine': {
+      const prev = board.definitions[op.key]
+      if (!prev) throw new OpError([`there is no template ${op.key} to remove`])
+      const definitions = { ...board.definitions }
+      delete definitions[op.key]
+      return { board: { ...board, definitions }, inverse: { op: 'define', key: op.key, board: prev as never } }
+    }
   }
 }
 
@@ -151,7 +169,7 @@ function cascadeFor(board: Board, id: Id): Op[] {
 }
 
 /** Structural problems that individual ops cannot see. Messages are written for the LLM. */
-export function checkBoard(board: Board): string[] {
+export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): string[] {
   const issues: string[] = []
   const byId = new Map<Id, BoardElement>()
   for (const el of board.elements) {
@@ -159,18 +177,27 @@ export function checkBoard(board: Board): string[] {
     byId.set(el.id, el)
   }
   const isAnchor = (el: BoardElement | undefined) =>
-    !!el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'draw')
+    !!el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'draw' || el.kind === 'instance')
 
   const parentOf = new Map<Id, Id>()
   for (const el of board.elements) {
     if (el.kind === 'edge') {
       for (const [side, end] of [['from', el.from], ['to', el.to]] as const) {
-        if ('id' in end && !isAnchor(byId.get(end.id))) {
-          issues.push(`edge "${el.id}" ${side} "${end.id}" is not a node, text, image or drawing`)
+        if (!('id' in end)) continue
+        const target = byId.get(end.id)
+        if (!isAnchor(target)) {
+          issues.push(`edge "${el.id}" ${side} "${end.id}" is not a node, text, image, drawing or template copy`)
+        } else if (end.port !== undefined) {
+          const spec = target?.kind === 'instance' ? board.definitions[target.template]?.template : undefined
+          if (!spec) issues.push(`edge "${el.id}" ${side} "${end.id}.${end.port}": only template copies have ports`)
+          else if (!spec.ports.some((p) => p.name === end.port)) {
+            issues.push(`edge "${el.id}" ${side}: ${spec.name} has no port "${end.port}" (it has ${spec.ports.map((p) => p.name).join(', ') || 'none'})`)
+          }
         }
       }
     }
-    if ((el.kind === 'node' || el.kind === 'text' || el.kind === 'image') && el.at?.kind === 'rel') {
+    if (el.kind === 'instance') issues.push(...checkInstance(board, el))
+    if ((el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance') && el.at?.kind === 'rel') {
       if (!isAnchor(byId.get(el.at.of))) issues.push(`"${el.id}" is placed ${el.at.dir} unknown "${el.at.of}"`)
     }
     if (el.kind === 'group') {
@@ -186,7 +213,7 @@ export function checkBoard(board: Board): string[] {
   // Cycles in relative placement or group nesting.
   const anchorOf = (id: Id): Id | undefined => {
     const el = byId.get(id)
-    return el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image') && el.at?.kind === 'rel'
+    return el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance') && el.at?.kind === 'rel'
       ? el.at.of
       : undefined
   }
@@ -203,7 +230,56 @@ export function checkBoard(board: Board): string[] {
       }
     }
   }
+  issues.push(...checkTemplates(board, opts.definitions ?? true))
   return issues
+}
+
+function checkInstance(board: Board, el: InstanceElement): string[] {
+  const def = board.definitions[el.template]
+  if (!def) return [`"${el.id}" uses template ${el.template}, which this board doesn't define`]
+  const issues: string[] = []
+  const spec = def.template!
+  for (const name of Object.keys(el.params)) {
+    if (!spec.params.some((p) => p.name === name)) {
+      issues.push(`"${el.id}": ${spec.name} has no parameter "${name}" (it has ${spec.params.map((p) => p.name).join(', ') || 'none'})`)
+    }
+  }
+  for (const path of Object.keys(el.overrides)) {
+    const child = path.split('/')[0]
+    if (!def.elements.some((c) => c.id === child)) issues.push(`"${el.id}" overrides "${path}", which ${spec.name} doesn't contain`)
+  }
+  return issues
+}
+
+/** The board's own template spec, and every embedded definition. */
+function checkTemplates(board: Board, withDefinitions: boolean): string[] {
+  const issues: string[] = []
+  if (board.template) {
+    const ids = new Set(board.elements.map((e) => e.id))
+    for (const port of board.template.ports) {
+      if (!ids.has(port.target)) issues.push(`port "${port.name}" points at unknown "${port.target}"`)
+    }
+    const names = board.template.params.map((p) => p.name)
+    if (new Set(names).size !== names.length) issues.push('template parameters must have different names')
+  }
+  if (!withDefinitions) return issues
+  for (const [key, def] of Object.entries(board.definitions)) {
+    const cycle = definitionCycle(board, key)
+    if (cycle) {
+      issues.push(`template ${key} contains itself: ${cycle.join(' → ')}`)
+      continue
+    }
+    // A definition is checked like a board, against the shared definitions.
+    const own = checkBoard({ ...def, definitions: board.definitions }, { definitions: false })
+    for (const issue of own) issues.push(`in template ${key}: ${issue}`)
+  }
+  return issues
+}
+
+/** Template definitions no instance needs any more; dropped so files carry only what they use. */
+function unusedDefinitions(board: Board): string[] {
+  const used = usedDefinitions(board)
+  return Object.keys(board.definitions).filter((k) => !used.has(k))
 }
 
 /**
@@ -238,6 +314,9 @@ export function commit(board: Board, ops: readonly Op[]): Applied {
       throw e
     }
   })
+  if (applied.some((o) => o.op === 'remove' || o.op === 'replace' || o.op === 'update' || o.op === 'define')) {
+    for (const key of unusedDefinitions(current)) run({ op: 'undefine', key })
+  }
   const issues = checkBoard(current)
   if (issues.length) throw new OpError(issues)
   return { board: current, ops: applied, inverse }

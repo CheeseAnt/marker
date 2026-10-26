@@ -18,7 +18,8 @@ export class DslError extends Error {
   }
 }
 
-const WORD = /[A-Za-z0-9_.#:%+-]/
+// Includes @ (template keys like server@3) and / (paths into nested template copies).
+const WORD = /[A-Za-z0-9_.#:%+@/-]/
 
 function readString(src: string, start: number, line: number): { v: string; end: number } {
   let v = ''

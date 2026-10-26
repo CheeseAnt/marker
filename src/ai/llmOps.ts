@@ -1,9 +1,13 @@
 import { z } from 'zod'
 import { FONT_IDS, withBoardFont } from '../model/fonts'
 import type { Op } from '../model/ops'
+import { detachOps } from '../templates/detach'
+import { insertCopyOps, type TemplateVersion } from '../templates/operations'
 import {
   heads,
   idSchema,
+  parseTemplateKey,
+  type Endpoint,
   shapes,
   styleSchema,
   type Board,
@@ -28,6 +32,17 @@ const placeSchema = z
   .describe('Where to put the element. Omit to let BoardBot lay it out next to what it connects to.')
 
 const sizeSchema = z.object({ w: z.number().positive(), h: z.number().positive() })
+
+/** An element id, or copy.port to attach to a template copy's port. */
+const endpointRef = z
+  .string()
+  .regex(/^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z_][A-Za-z0-9_-]*)?$/, 'an element id, or copy.port')
+  .describe('An element id, or copyId.port to attach to a port of a template copy.')
+
+function toEndpoint(ref: string): Endpoint {
+  const [id, port] = ref.split('.')
+  return port ? { id, port } : { id }
+}
 
 const style = styleSchema.describe(
   'Visual style. Colours are hex like #1971c2. fill is the background, stroke the outline and text colour.',
@@ -55,8 +70,8 @@ export const llmOpSchema = z.discriminatedUnion('op', [
   z.object({
     op: z.literal('add_edge'),
     id: idSchema.optional().describe('Omit to generate one.'),
-    from: idSchema,
-    to: idSchema,
+    from: endpointRef,
+    to: endpointRef,
     label: z.string().optional(),
     head: z.enum(heads).optional().describe('-> (default), <-, <-> or -- for no arrowheads.'),
     style: style.optional(),
@@ -80,6 +95,24 @@ export const llmOpSchema = z.discriminatedUnion('op', [
     to: idSchema.optional(),
     head: z.enum(heads).optional(),
   }),
+  z.object({
+    op: z.literal('add_copy'),
+    id: idSchema.optional().describe('Omit to number it after the template, e.g. web_server2.'),
+    template: idSchema.describe('A template name from the catalog.'),
+    params: z.record(z.string(), z.string()).optional().describe('Values for the template\'s fill-ins; omitted ones use their defaults.'),
+    place: placeSchema.optional(),
+    scale: z.number().positive().optional(),
+  }),
+  z.object({
+    op: z.literal('update_copy'),
+    id: idSchema,
+    params: z.record(z.string(), z.string()).optional().describe('Fill-in values to change.'),
+    place: placeSchema.optional(),
+    scale: z.number().positive().optional(),
+    part_text: z.record(z.string(), z.string()).optional().describe('New text for parts of this copy only, by part id.'),
+    part_style: z.record(z.string(), styleSchema).optional().describe('Style changes for parts of this copy only, by part id.'),
+  }),
+  z.object({ op: z.literal('detach'), id: idSchema.describe('Turns a template copy into ordinary elements so its parts can be edited freely.') }),
   z.object({ op: z.literal('remove'), id: idSchema.describe('Removing a node also removes its edges.') }),
   z.object({ op: z.literal('group'), id: idSchema, members: z.array(idSchema).min(1), label: z.string().optional() }),
   z.object({ op: z.literal('ungroup'), id: idSchema.describe('The group to dissolve; its members stay.') }),
@@ -121,7 +154,12 @@ function toPlacement(place: z.infer<typeof placeSchema>): Placement {
  * Translates model ops into core ops against `board`. Problems the model can fix are returned
  * as `issues` (written for the model) rather than thrown.
  */
-export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: string[] } {
+export interface TranslateContext {
+  /** Latest version of each template the model may add, by name. */
+  templates: TemplateVersion[]
+}
+
+export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext = { templates: [] }): { ops: Op[]; issues: string[] } {
   const ops: Op[] = []
   const issues: string[] = []
   // Elements as they will be once earlier ops in this batch apply, for kind checks.
@@ -161,7 +199,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
         ops.push({ op: 'add', element: { ...empty, kind: 'text', id: o.id, text: o.text, ...(o.place && { at: toPlacement(o.place) }), style: o.style ?? {} } })
         break
       case 'add_edge': {
-        const id = o.id && !used.has(o.id) ? (used.add(o.id), o.id) : fresh(`${o.from}_${o.to}`)
+        const id = o.id && !used.has(o.id) ? (used.add(o.id), o.id) : fresh(`${o.from}_${o.to}`.replace(/\./g, '_'))
         known.set(id, 'edge')
         ops.push({
           op: 'add',
@@ -169,8 +207,8 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
             ...empty,
             kind: 'edge',
             id,
-            from: { id: o.from },
-            to: { id: o.to },
+            from: toEndpoint(o.from),
+            to: toEndpoint(o.to),
             head: o.head ?? '->',
             ...(o.label && { label: o.label }),
             style: o.style ?? {},
@@ -196,7 +234,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
           else issues.push(`${at}: only nodes have a shape`)
         }
         if (o.place) {
-          if (kind === 'node' || kind === 'text' || kind === 'image') set.at = toPlacement(o.place)
+          if (kind === 'node' || kind === 'text' || kind === 'image' || kind === 'instance') set.at = toPlacement(o.place)
           else if (kind === 'draw' && !('rel' in o.place)) set.at = { x: o.place.x, y: o.place.y }
           else issues.push(`${at}: a ${kind} can't be placed that way`)
         }
@@ -204,7 +242,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
         if (o.style) set.style = o.style
         for (const key of ['from', 'to'] as const) {
           if (o[key] === undefined) continue
-          if (kind === 'edge') set[key] = { id: o[key] }
+          if (kind === 'edge') set[key] = toEndpoint(o[key])
           else issues.push(`${at}: only edges have "${key}"`)
         }
         if (o.head) {
@@ -213,6 +251,59 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
         }
         if (Object.keys(set).length === 0) issues.push(`${at}: nothing to change`)
         else ops.push({ op: 'update', id: o.id, set })
+        break
+      }
+      case 'add_copy': {
+        // The library's latest version, or the version this board already has.
+        const fromLibrary = ctx.templates.find((t) => t.name === o.template)
+        const onBoard = Object.keys(board.definitions)
+          .filter((k) => parseTemplateKey(k).name === o.template)
+          .sort((a, b) => parseTemplateKey(b).version - parseTemplateKey(a).version)[0]
+        if (!fromLibrary && !onBoard) {
+          const names = [...new Set([...ctx.templates.map((t) => t.name), ...Object.keys(board.definitions).map((k) => parseTemplateKey(k).name)])]
+          issues.push(`${at}: there is no template "${o.template}" (available: ${names.join(', ') || 'none'})`)
+          break
+        }
+        const id = o.id && !used.has(o.id) ? (used.add(o.id), o.id) : nextNumbered(o.template, used)
+        known.set(id, 'instance')
+        const place = o.place && toPlacement(o.place)
+        if (fromLibrary) {
+          ops.push(...insertCopyOps(board, fromLibrary, { id, params: o.params, ...(place && { at: place }), ...(o.scale && { scale: o.scale }) }))
+        } else {
+          ops.push({
+            op: 'add',
+            element: { ...empty, kind: 'instance', id, template: onBoard, params: o.params ?? {}, overrides: {}, ...(place && { at: place }), ...(o.scale && { scale: o.scale }) },
+          })
+        }
+        break
+      }
+      case 'update_copy': {
+        const copy = board.elements.find((e) => e.id === o.id)
+        if (copy?.kind !== 'instance') {
+          issues.push(`${at}: "${o.id}" is not a template copy`)
+          break
+        }
+        const set: Record<string, unknown> = {}
+        if (o.params) set.params = { ...copy.params, ...o.params }
+        if (o.place) set.at = toPlacement(o.place)
+        if (o.scale) set.scale = o.scale
+        if (o.part_text || o.part_style) {
+          const overrides = structuredClone(copy.overrides)
+          for (const [part, text] of Object.entries(o.part_text ?? {})) overrides[part] = { ...overrides[part], text }
+          for (const [part, st] of Object.entries(o.part_style ?? {})) overrides[part] = { ...overrides[part], style: { ...overrides[part]?.style, ...st } }
+          set.overrides = overrides
+        }
+        if (Object.keys(set).length === 0) issues.push(`${at}: nothing to change`)
+        else ops.push({ op: 'update', id: o.id, set })
+        break
+      }
+      case 'detach': {
+        const detach = detachOps(board, o.id, { keepGrouped: true })
+        if (detach.length === 0) issues.push(`${at}: "${o.id}" is not a template copy`)
+        else {
+          ops.push(...detach)
+          known.set(o.id, 'group')
+        }
         break
       }
       case 'remove':
@@ -243,4 +334,14 @@ export function toCoreOps(board: Board, llmOps: LlmOp[]): { ops: Op[]; issues: s
     }
   })
   return { ops, issues }
+}
+
+/** base1, base2, ...: the first number not taken. */
+function nextNumbered(base: string, used: Set<string>): string {
+  for (let n = 1; ; n++) {
+    if (!used.has(`${base}${n}`)) {
+      used.add(`${base}${n}`)
+      return `${base}${n}`
+    }
+  }
 }

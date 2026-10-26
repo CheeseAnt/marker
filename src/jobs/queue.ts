@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { runEdit, type EditStage } from '../ai/orchestrator'
 import { createProvider } from '../ai/providers'
+import { latestVersion, useLibrary } from '../templates/library'
 import { formatRecent, recentContext, type RecentTurn } from '../ai/recent'
 import { ProviderError, type Usage } from '../ai/providers/types'
 import { OpError } from '../model/apply'
@@ -87,6 +88,7 @@ export const useJobs = create<QueueState>((set, get) => {
         getHistory: () => useBoard.getState().history,
         selection: job.selection,
         recent: formatRecent(recentContext(useBoard.getState().history, recentTurns(get().jobs))),
+        templates: Object.values(useLibrary.getState().entries).map(latestVersion),
         signal: controller.signal,
         onStage: (stage, { outputTokens, repair }) => patch(job.id, { stage, outputTokens, repair }),
       })

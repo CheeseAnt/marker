@@ -1,4 +1,6 @@
 import { commit } from '../model/apply'
+import { detachOps } from '../templates/detach'
+import { ownerInstance } from '../templates/expand'
 import { longestIncreasing } from '../model/diffBoards'
 import { DEFAULT_FONT_SIZE, effectiveStyle } from '../model/geometry'
 import type { Op } from '../model/ops'
@@ -8,6 +10,8 @@ import {
   type Board,
   type BoardElement,
   type EdgeElement,
+  type InstanceElement,
+  type Override,
   type Endpoint,
   type Head,
   type Id,
@@ -113,6 +117,89 @@ function finish(set: Patch, style: Patch, hints: Patch) {
   return set
 }
 
+/** What happened to a template copy on the canvas. */
+type CopyChange = { kind: 'none' } | { kind: 'update'; set: Patch } | { kind: 'remove' } | { kind: 'detach' } | { kind: 'reject' }
+
+/** The child path of a compiled id inside its copy: "web1/b~label" -> "b". */
+function childPath(instanceId: Id, compiledId: string): string {
+  const path = compiledId.slice(instanceId.length + 1)
+  return path.endsWith(LABEL_SUFFIX) ? path.slice(0, -LABEL_SUFFIX.length) : path
+}
+
+function boundsOf(els: ExElement[]) {
+  const shapes = els.filter((e) => !(e.type === 'text' && e.containerId))
+  const x1 = Math.min(...shapes.map((e) => e.x))
+  const y1 = Math.min(...shapes.map((e) => e.y))
+  const x2 = Math.max(...shapes.map((e) => e.x + e.width))
+  const y2 = Math.max(...shapes.map((e) => e.y + e.height))
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+}
+
+/**
+ * A copy can be moved or scaled as a whole, have its texts and styles changed (stored as
+ * overrides), be deleted, or be ungrouped (which detaches it). Moving or deleting single parts
+ * would break the link to its template, so that is rejected and the canvas reverts.
+ */
+function copyChanges(el: InstanceElement, compiled: ExElement[], liveById: Map<string, ExElement>, box: { x: number; y: number } | undefined): CopyChange {
+  const parts = compiled.filter((c) => c.id.startsWith(`${el.id}/`))
+  if (parts.length === 0) return { kind: 'none' }
+  const live = parts.map((c) => liveById.get(c.id))
+  if (live.every((e) => !e)) return { kind: 'remove' }
+  if (live.some((e) => !e)) return { kind: 'reject' }
+  const now = live as ExElement[]
+  if (now.some((e) => !e.groupIds.includes(el.id))) return { kind: 'detach' }
+
+  const set: Patch = {}
+  const before = boundsOf(parts)
+  const after = boundsOf(now)
+  const rx = before.w ? after.w / before.w : 1
+  const ry = before.h ? after.h / before.h : 1
+  if (Math.abs(rx - ry) > 0.02) return { kind: 'reject' }
+  const ratio = Math.abs(rx - 1) > 0.01 ? rx : 1
+  // Every part must sit where moving and scaling the whole copy would put it.
+  for (let i = 0; i < parts.length; i++) {
+    const c = parts[i]
+    const e = now[i]
+    if (c.type === 'text' && c.containerId) continue
+    const x = after.x + (c.x - before.x) * ratio
+    const y = after.y + (c.y - before.y) * ratio
+    if (Math.abs(e.x - x) > 1 || Math.abs(e.y - y) > 1) return { kind: 'reject' }
+  }
+  if (ratio !== 1) set.scale = r2((el.scale ?? 1) * ratio)
+  if (ratio !== 1 || !near(after.x, before.x) || !near(after.y, before.y)) {
+    const origin = box ?? before
+    set.at = { kind: 'at', x: r2(after.x + (origin.x - before.x) * ratio), y: r2(after.y + (origin.y - before.y) * ratio) }
+  }
+
+  // Text and style changes on parts become overrides.
+  const scale = el.scale ?? 1
+  const overrides: Record<string, Override> = structuredClone(el.overrides)
+  let overridden = false
+  const note = (path: string, change: Override) => {
+    const o = (overrides[path] ??= {})
+    if (change.text !== undefined) o.text = change.text
+    if (change.style) o.style = { ...o.style, ...change.style }
+    overridden = true
+  }
+  parts.forEach((c, i) => {
+    const e = now[i]
+    const path = childPath(el.id, c.id)
+    if (e.text !== undefined && e.text !== c.text) note(path, { text: e.text })
+    const style: Patch = {}
+    if (!(c.type === 'text' && c.containerId)) {
+      for (const [prop, key] of STYLE_PROPS) if (e[prop] !== c[prop]) style[key] = e[prop]
+      if (e.fillStyle !== c.fillStyle) style.pattern = PATTERN_OF[e.fillStyle] ?? 'solid'
+    }
+    if (e.type === 'text') {
+      if (e.fontSize !== c.fontSize && e.fontSize) style.fontSize = r2(e.fontSize / scale)
+      if (e.fontFamily !== c.fontFamily) style.font = fontForFamily(e.fontFamily) ?? DEFAULT_FONT
+    }
+    if (Object.keys(style).length) note(path, { style: style as Override['style'] })
+  })
+  if (overridden) set.overrides = overrides
+  return Object.keys(set).length ? { kind: 'update', set } : { kind: 'none' }
+}
+
 export interface DiffContext {
   board: Board
   compiled: Compiled
@@ -123,7 +210,17 @@ export interface DiffContext {
  * Turns what the user did in Excalidraw into ops against `board`, by comparing the live
  * scene with `compiled` (the scene we last produced from `board`). Unchanged scenes yield [].
  */
-export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
+export function diffScene(ctx: DiffContext): Op[] {
+  return diffSceneDetailed(ctx).ops
+}
+
+export interface SceneDiff {
+  ops: Op[]
+  /** Template copies whose parts were changed in a way that isn't kept; the canvas should revert. */
+  rejected: Id[]
+}
+
+export function diffSceneDetailed({ board, compiled, scene }: DiffContext): SceneDiff {
   const live = scene.filter((e) => !e.isDeleted)
   const liveById = new Map(live.map((e) => [e.id, e]))
   const compiledById = new Map(compiled.elements.map((e) => [e.id, e]))
@@ -149,16 +246,36 @@ export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
 
   const endpointOf = (binding: ExElement['startBinding'], fallback: Point | undefined): Endpoint | undefined => {
     const target = binding && liveById.get(binding.elementId)
-    if (target && isRendered(target)) return { id: toBoardId(target.id) }
+    if (target && isRendered(target)) {
+      // A part of a template copy: attach to the port on that part, or to the copy itself.
+      const owner = ownerInstance(target.id)
+      if (owner) {
+        const inst = boardById.get(owner.instance)
+        const spec = inst?.kind === 'instance' ? board.definitions[inst.template]?.template : undefined
+        const port = spec?.ports.find((p) => p.target === owner.child.split('/')[0])
+        return port ? { id: owner.instance, port: port.name } : { id: owner.instance }
+      }
+      return { id: toBoardId(target.id) }
+    }
     return fallback && { point: fallback }
   }
 
   const adds: Op[] = []
   const updates: Op[] = []
   const removes: Op[] = []
+  const rejected: Id[] = []
 
+  const detached: Id[] = []
   for (const el of board.elements) {
     if (el.kind === 'group') continue
+    if (el.kind === 'instance') {
+      const change = copyChanges(el, compiled.elements, liveById, compiled.boxes.get(el.id))
+      if (change.kind === 'remove') removes.push({ op: 'remove', id: el.id })
+      else if (change.kind === 'update') updates.push({ op: 'update', id: el.id, set: change.set })
+      else if (change.kind === 'detach') detached.push(el.id)
+      else if (change.kind === 'reject') rejected.push(el.id)
+      continue
+    }
     const ex = liveById.get(el.id)
     const c = compiledById.get(el.id)
     if (!ex) {
@@ -209,7 +326,7 @@ export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
         break
       }
       case 'edge':
-        Object.assign(set, edgeChanges(el, ex, endpointOf))
+        Object.assign(set, edgeChanges(el, ex, c, endpointOf))
         styleHintDiff(ex, c, style, hints)
         Object.assign(hints, diffHints(el, headOf(ex).hints))
         // An empty label renders nothing, so it is the same as no label.
@@ -226,7 +343,7 @@ export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
 
   // Elements drawn by hand. Their style is whatever differs from a freshly compiled default.
   for (const ex of live) {
-    if (boardById.has(ex.id) || !isRendered(ex)) continue
+    if (boardById.has(ex.id) || !isRendered(ex) || ownerInstance(ex.id)) continue
     if (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId)) continue
     const element = newElement(ex, toBoardId(ex.id), labelOf.get(ex.id), endpointOf)
     if (!element) continue
@@ -245,8 +362,12 @@ export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
 
   const groupOps = diffGroups(board, live, liveById, toBoardId)
   const structural = [...adds, ...updates, ...groupOps, ...removes]
-  const intermediate = structural.length ? commit(board, structural).board : board
-  return [...structural, ...diffOrder(intermediate, live, toBoardId, idFor)]
+  let intermediate = structural.length ? commit(board, structural).board : board
+  // Ungrouping a copy detaches it; its parts take their place in the board as ordinary elements.
+  const detachOpsList = detached.flatMap((id) => detachOps(intermediate, id, { keepGrouped: false }))
+  if (detachOpsList.length) intermediate = commit(intermediate, detachOpsList).board
+  const ops = [...structural, ...detachOpsList, ...(detached.length ? [] : diffOrder(intermediate, live, toBoardId, idFor))]
+  return { ops, rejected }
 }
 
 function diffHints(el: BoardElement, wanted: Patch): Patch {
@@ -258,12 +379,17 @@ function diffHints(el: BoardElement, wanted: Patch): Patch {
 function edgeChanges(
   el: EdgeElement,
   ex: ExElement,
+  c: ExElement,
   endpointOf: (b: ExElement['startBinding'], fallback: Point | undefined) => Endpoint | undefined,
 ): Patch {
   const set: Patch = {}
   const pts = absolutePoints(ex)
-  const from = endpointOf(ex.startBinding, pts[0])
-  const to = endpointOf(ex.endBinding, pts.at(-1))
+  const was = absolutePoints(c)
+  // An end we drew unbound (e.g. to a template copy without a port) is unchanged if it hasn't moved.
+  const unmoved = (binding: ExElement['startBinding'], compiledBinding: ExElement['startBinding'], p?: Point, q?: Point) =>
+    !binding && !compiledBinding && p && q && near(p.x, q.x) && near(p.y, q.y)
+  const from = unmoved(ex.startBinding, c.startBinding, pts[0], was[0]) ? el.from : endpointOf(ex.startBinding, pts[0])
+  const to = unmoved(ex.endBinding, c.endBinding, pts.at(-1), was.at(-1)) ? el.to : endpointOf(ex.endBinding, pts.at(-1))
   if (from && !sameEndpoint(from, el.from)) set.from = from
   if (to && !sameEndpoint(to, el.to)) set.to = to
   const via = pts.slice(1, -1)
@@ -338,8 +464,13 @@ function diffGroups(
   }
   for (const ex of live) {
     if (!isRendered(ex) || (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId))) continue
-    const chain = ex.groupIds.map(toBoardId)
-    if (chain.length) addMember(chain[0], toBoardId(ex.id))
+    // A copy's parts stand for the copy: only groups outside it (after its own id) count.
+    const owner = ownerInstance(ex.id)
+    const member = owner ? owner.instance : toBoardId(ex.id)
+    const groupIds = owner ? ex.groupIds.slice(ex.groupIds.indexOf(owner.instance) + 1) : ex.groupIds
+    if (owner && !ex.groupIds.includes(owner.instance)) continue
+    const chain = groupIds.map(toBoardId)
+    if (chain.length) addMember(chain[0], member)
     for (let k = 0; k + 1 < chain.length; k++) addMember(chain[k + 1], chain[k])
   }
 
@@ -370,7 +501,8 @@ function diffOrder(board: Board, live: ExElement[], toBoardId: (exId: string) =>
   const desired: Id[] = []
   for (const ex of live) {
     if (ex.id.endsWith(LABEL_SUFFIX) || (ex.type === 'text' && ex.containerId)) continue
-    const id = idFor.get(ex.id) ?? (isRendered(ex) ? toBoardId(ex.id) : undefined)
+    const owner = ownerInstance(ex.id)
+    const id = owner ? owner.instance : (idFor.get(ex.id) ?? (isRendered(ex) ? toBoardId(ex.id) : undefined))
     if (id && present.has(id) && !desired.includes(id)) desired.push(id)
   }
   const current = board.elements.filter((e) => desired.includes(e.id)).map((e) => e.id)

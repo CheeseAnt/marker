@@ -669,6 +669,194 @@ button {
   line-height: 1.5;
 }
 
+.drawer-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Templates: rows on the drawer's paper, each with a small drawing of the template. */
+
+.template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.template-entry {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.875rem;
+  padding: 0.875rem 0.75rem;
+  border-bottom: 1px solid var(--frame-light);
+}
+
+.template-preview {
+  width: 6.5rem;
+  height: 4.5rem;
+  display: grid;
+  place-items: center;
+  background: var(--board);
+  border: 1px solid var(--frame-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.template-preview svg {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.template-info p {
+  margin: 0;
+}
+
+.template-name {
+  font-weight: 700;
+  font-size: var(--step-0);
+}
+
+.template-version {
+  font-weight: 400;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.template-description {
+  font-size: var(--step--1);
+  margin-top: 0.125rem !important;
+}
+
+.template-meta {
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  margin-top: 0.25rem !important;
+  line-height: 1.4;
+}
+
+.template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.template-actions button,
+.template-foreign button {
+  padding: 0.1875rem 0.625rem;
+  border-radius: 3px;
+  border: 1px solid var(--frame);
+  background: var(--board);
+  font-size: var(--step--1);
+  cursor: pointer;
+}
+
+.template-actions button.primary {
+  background: var(--marker-blue);
+  border-color: #1b469f;
+  color: #fff;
+}
+
+.template-actions button.quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--ink-soft);
+}
+
+.template-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--step--1);
+  color: var(--marker-red);
+}
+
+.template-foreign {
+  padding: 0.75rem;
+}
+
+.template-foreign h3 {
+  margin: 0 0 0.5rem;
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+}
+
+.template-foreign ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.375rem;
+}
+
+.template-foreign li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-code);
+  font-size: var(--step--1);
+}
+
+/* Save-as-template dialog lists */
+
+.choice-list {
+  border: 0;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.choice-list legend {
+  font-weight: 700;
+  font-size: var(--step--1);
+  margin-bottom: 0.375rem;
+}
+
+.choice-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.choice-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--step-0);
+}
+
+.choice-text {
+  font-family: var(--font-hand);
+  font-size: var(--step-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.choice-name,
+.choice-row select {
+  font: inherit;
+  font-size: var(--step--1);
+  font-family: var(--font-code);
+  padding: 0.25rem 0.375rem;
+  border: 1px solid var(--frame-deep);
+  border-radius: 3px;
+  width: 8rem;
+}
+
+.choice-row select {
+  font-family: var(--font-ui);
+  width: auto;
+}
+
+.settings-replace {
+  margin-top: 0.25rem;
+}
+
 /* Board text */
 
 .text-panel-editor {
@@ -810,6 +998,9 @@ button {
 
 .drawer-toggles button:last-child {
   border-radius: 0 3px 3px 0;
+}
+
+.drawer-toggles button + button {
   border-left: 0;
 }
 

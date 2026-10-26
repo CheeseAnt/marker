@@ -1,6 +1,7 @@
 import { fontPreset, type FontId } from './fonts'
 import { parsePath } from './path'
-import type { Board, BoardElement, Id, NodeElement, Placement, Size, Style, TextElement } from './types'
+import { instanceContent, MAX_NESTING } from '../templates/expand'
+import type { Board, BoardElement, Id, InstanceElement, NodeElement, Placement, Size, Style, TextElement } from './types'
 
 export interface Box {
   x: number
@@ -34,10 +35,34 @@ export function defaultNodeSize(node: NodeElement, fontSize: number, font?: Font
   }
 }
 
-export function intrinsicSize(board: Board, el: BoardElement): Size | undefined {
+/** Shown in place of an instance whose template is missing or nested too deeply. */
+export const MISSING_TEMPLATE_SIZE: Size = { w: 160, h: 80 }
+
+export interface InstanceLayout {
+  content: Board
+  /** Bounds of the content in the template's own coordinates. */
+  bounds: Box
+  scale: number
+}
+
+/** What an instance contains and how big it is, or undefined if it can't be shown. */
+export function instanceLayout(board: Board, el: InstanceElement, depth = 0): InstanceLayout | undefined {
+  if (depth >= MAX_NESTING) return undefined
+  const content = instanceContent(board, el)
+  if (!content) return undefined
+  const boxes = resolveBoxes(content, depth + 1)
+  const bounds = unionBoxes(content.elements.filter((e) => e.kind !== 'group').flatMap((e) => boxes.get(e.id) ?? []))
+  return { content, bounds: bounds ?? { x: 0, y: 0, w: MISSING_TEMPLATE_SIZE.w, h: MISSING_TEMPLATE_SIZE.h }, scale: el.scale ?? 1 }
+}
+
+export function intrinsicSize(board: Board, el: BoardElement, depth = 0): Size | undefined {
   const style = effectiveStyle(board, el)
   const fontSize = style.fontSize ?? DEFAULT_FONT_SIZE
   switch (el.kind) {
+    case 'instance': {
+      const layout = instanceLayout(board, el, depth)
+      return layout ? { w: layout.bounds.w * layout.scale, h: layout.bounds.h * layout.scale } : MISSING_TEMPLATE_SIZE
+    }
     case 'node':
       return el.size ?? defaultNodeSize(el, fontSize, style.font)
     case 'text':
@@ -49,12 +74,13 @@ export function intrinsicSize(board: Board, el: BoardElement): Size | undefined 
   }
 }
 
-function intrinsicSizeOrDraw(board: Board, el: BoardElement): boolean {
-  return el.kind === 'draw' || Boolean(intrinsicSize(board, el))
+/** Elements other elements can be placed relative to. */
+function isAnchor(el: BoardElement): boolean {
+  return el.kind === 'draw' || el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance'
 }
 
 function placementOf(el: BoardElement): Placement | undefined {
-  return el.kind === 'node' || el.kind === 'text' || el.kind === 'image' ? el.at : undefined
+  return el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance' ? el.at : undefined
 }
 
 function relativeBox(of: Box, size: Size, p: Extract<Placement, { kind: 'rel' }>): Box {
@@ -90,10 +116,16 @@ export function unionBoxes(boxes: Box[]): Box | undefined {
  * Relative placements follow their anchor; unplaced elements and broken or cyclic anchors
  * fall back to a column right of the placed content, so compile never fails.
  */
-export function resolveBoxes(board: Board): Map<Id, Box> {
+export function resolveBoxes(board: Board, depth = 0): Map<Id, Box> {
   const byId = new Map(board.elements.map((e) => [e.id, e]))
   const boxes = new Map<Id, Box>()
   const visiting = new Set<Id>()
+  // Instance sizes are costly (they lay out their template), so each is computed once.
+  const sizes = new Map<Id, Size | undefined>()
+  const sizeOf = (el: BoardElement) => {
+    if (!sizes.has(el.id)) sizes.set(el.id, intrinsicSize(board, el, depth))
+    return sizes.get(el.id)
+  }
   // Elements with no placement, or whose anchor is missing or part of a cycle.
   const unplaced: Id[] = []
 
@@ -108,7 +140,7 @@ export function resolveBoxes(board: Board): Map<Id, Box> {
       boxes.set(id, box)
       return box
     }
-    const size = intrinsicSize(board, el)
+    const size = sizeOf(el)
     if (!size) return undefined
     const p = placementOf(el)
     if (!p) {
@@ -121,7 +153,7 @@ export function resolveBoxes(board: Board): Map<Id, Box> {
       return box
     }
     const anchorEl = byId.get(p.of)
-    if (!anchorEl || !intrinsicSizeOrDraw(board, anchorEl) || visiting.has(p.of)) {
+    if (!anchorEl || !isAnchor(anchorEl) || visiting.has(p.of)) {
       unplaced.push(id)
       return undefined
     }
@@ -143,7 +175,7 @@ export function resolveBoxes(board: Board): Map<Id, Box> {
   const columnX = placed ? placed.x + placed.w + UNPLACED_GAP : 0
   for (const id of new Set(unplaced)) {
     if (boxes.has(id)) continue
-    const size = intrinsicSize(board, byId.get(id)!)!
+    const size = sizeOf(byId.get(id)!)!
     boxes.set(id, { x: columnX, y: cursorY, ...wh(size) })
     cursorY += size.h + UNPLACED_GAP / 2
   }

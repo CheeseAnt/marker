@@ -2,6 +2,10 @@ import {
   directions,
   elementSchema,
   emptyBoard,
+  parseTemplateKey,
+  portSides,
+  type Override,
+  type PortSide,
   shapes,
   styleSchema,
   type Board,
@@ -233,6 +237,54 @@ function parseElement(keyword: string, p: LineParser): BoardElement {
       if (!size) p.fail('images need size(w,h)')
       return { kind: 'image', id, asset: ref.slice(6), at, size, ...parseAttrs(p) }
     }
+    case 'use': {
+      const template = p.word('a template like server@1')
+      if (!/^[A-Za-z_][A-Za-z0-9_-]*@\d+$/.test(template)) p.fail('expected a template like server@1')
+      const at = parsePlacement(p)
+      let scale: number | undefined
+      if (p.isWord('scale')) {
+        p.next()
+        ;[scale] = p.numbers(1, 'a scale')
+      }
+      const params: Record<string, string> = {}
+      if (p.isWord('with')) {
+        p.next()
+        parseList(p, (key) => {
+          const tok = p.next()
+          if (tok.t !== 'string' && tok.t !== 'word') p.fail(`expected a value for "${key}"`, tok)
+          params[key] = tok.v
+        })
+      }
+      const overrides: Record<string, Override> = {}
+      if (p.isWord('override')) {
+        p.next()
+        parseList(p, (path) => {
+          const dot = path.lastIndexOf('.')
+          if (dot <= 0) p.fail(`expected child.field, like box.fill, not "${path}"`)
+          const child = path.slice(0, dot)
+          const field = path.slice(dot + 1)
+          const tok = p.next()
+          if (tok.t !== 'string' && tok.t !== 'word') p.fail(`expected a value for "${path}"`, tok)
+          const o = (overrides[child] ??= {})
+          if (field === 'text') o.text = tok.v
+          else {
+            const style = styleSchema.strict().safeParse({ [field]: NUMERIC_STYLE_KEYS.has(field) && isNumber(tok.v) ? Number(tok.v) : tok.v })
+            if (!style.success) p.fail(`invalid override "${path}": ${style.error.issues[0].message}`, tok)
+            o.style = { ...o.style, ...style.data }
+          }
+        })
+      }
+      return {
+        kind: 'instance',
+        id,
+        template,
+        params,
+        overrides,
+        ...(at && { at }),
+        ...(scale !== undefined && { scale }),
+        ...parseAttrs(p),
+      }
+    }
     case 'draw': {
       if (!p.isWord('at')) p.fail('drawings need at(x,y)')
       p.next()
@@ -246,12 +298,51 @@ function parseElement(keyword: string, p: LineParser): BoardElement {
   return p.fail(`unknown statement "${keyword}"`)
 }
 
+/** Parses `(key=value, key=value)`, calling `value` after each `key=` to read the value. */
+function parseList(p: LineParser, value: (key: string) => void) {
+  p.punct('(')
+  let first = true
+  while (!p.isPunct(')')) {
+    if (!first) p.punct(',')
+    first = false
+    const key = p.word('a name')
+    p.punct('=')
+    value(key)
+  }
+  p.punct(')')
+}
+
+const DEFINE_OPEN = /^\s*define\s+(\S+)\s*\{\s*$/
+
 /** Parses board text. Throws DslError with a line and column on the first problem. */
 export function parseBoard(src: string): Board {
+  return parseLines(src.split('\n'), 0, true)
+}
+
+function parseLines(lines: string[], offset: number, allowDefinitions: boolean): Board {
   const board = emptyBoard()
   let sawHeader = false
-  src.split('\n').forEach((raw, idx) => {
-    const lineNo = idx + 1
+  let skipUntil = -1
+  lines.forEach((raw, idx) => {
+    const lineNo = offset + idx + 1
+    if (idx <= skipUntil) return
+    // define <key> { ... } holds a template's board, embedded so the file stands alone.
+    const define = raw.match(DEFINE_OPEN)
+    if (define) {
+      if (!allowDefinitions) throw new DslError(lineNo, 1, 'definitions cannot be nested; put every define at the top level')
+      const key = define[1]
+      if (!/^[A-Za-z_][A-Za-z0-9_-]*@\d+$/.test(key)) throw new DslError(lineNo, raw.indexOf(key) + 1, 'expected a template like server@1')
+      const close = lines.findIndex((l, j) => j > idx && l.trim() === '}')
+      if (close < 0) throw new DslError(lineNo, 1, `define ${key} is missing its closing "}"`)
+      const inner = parseLines(lines.slice(idx + 1, close), lineNo, false)
+      if (!inner.template) throw new DslError(lineNo, 1, `define ${key} needs a "template" line`)
+      const { name } = parseTemplateKey(key)
+      if (inner.template.name !== name) throw new DslError(lineNo, 1, `define ${key} holds template "${inner.template.name}"`)
+      if (board.definitions[key]) throw new DslError(lineNo, 1, `${key} is defined twice`)
+      board.definitions[key] = inner
+      skipUntil = close
+      return
+    }
     const tokens = tokenizeLine(raw, lineNo)
     if (tokens.length === 0) return
     const p: LineParser = new LineParser(tokens, lineNo)
@@ -264,6 +355,32 @@ export function parseBoard(src: string): Board {
       if (!/^v\d+$/.test(v)) p.fail('expected a format version like v1')
       board.formatVersion = Number(v.slice(1))
       if (!p.done()) p.fail('unexpected text after the board header')
+      return
+    }
+    if (keyword === 'template') {
+      if (board.template) p.fail('only one "template" line is allowed')
+      const name = p.word('a template name')
+      if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) p.fail('template names are identifiers like server')
+      const description = p.peek()?.t === 'string' ? p.string('a description') : ''
+      if (!p.done()) p.fail('unexpected text after the template line')
+      board.template = { name, description, params: [], ports: [] }
+      return
+    }
+    if (keyword === 'param' || keyword === 'port') {
+      if (!board.template) p.fail(`"${keyword}" lines come after the "template" line`)
+      if (keyword === 'param') {
+        const name = p.word('a parameter name')
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) p.fail('parameter names are identifiers like name')
+        const fallback = p.peek()?.t === 'string' ? p.string('a default value') : ''
+        board.template.params.push({ name, default: fallback })
+      } else {
+        const name = p.word('a port name')
+        const target = p.word('the element the port is on')
+        const side = (p.done() ? 'center' : p.word('a side')) as PortSide
+        if (!portSides.includes(side)) p.fail(`ports are on the ${portSides.join(', ')}`)
+        board.template.ports.push({ name, target, side })
+      }
+      if (!p.done()) p.fail(`unexpected text after the ${keyword}`)
       return
     }
     if (keyword === 'style') {

@@ -113,6 +113,24 @@ export const drawSchema = z.object({
   path: z.string().min(1),
 })
 
+/** `name@version`, e.g. server@3. */
+export const templateKeySchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_-]*@\d+$/, 'template keys look like name@3')
+export type TemplateKey = z.infer<typeof templateKeySchema>
+
+/** Per-child changes on one instance, keyed by the child's id inside the template (nested: "disk/box"). */
+export const overrideSchema = z.object({ text: z.string().optional(), style: styleSchema.optional() })
+export type Override = z.infer<typeof overrideSchema>
+
+export const instanceSchema = z.object({
+  ...base,
+  kind: z.literal('instance'),
+  template: templateKeySchema,
+  params: z.record(z.string(), z.string()).default({}),
+  at: placementSchema.optional(),
+  scale: z.number().positive().optional(),
+  overrides: z.record(z.string(), overrideSchema).default({}),
+})
+
 export const elementSchema = z.discriminatedUnion('kind', [
   nodeSchema,
   edgeSchema,
@@ -120,6 +138,7 @@ export const elementSchema = z.discriminatedUnion('kind', [
   groupSchema,
   imageSchema,
   drawSchema,
+  instanceSchema,
 ])
 
 export type NodeElement = z.infer<typeof nodeSchema>
@@ -128,10 +147,51 @@ export type TextElement = z.infer<typeof textSchema>
 export type GroupElement = z.infer<typeof groupSchema>
 export type ImageElement = z.infer<typeof imageSchema>
 export type DrawElement = z.infer<typeof drawSchema>
+export type InstanceElement = z.infer<typeof instanceSchema>
 export type BoardElement = z.infer<typeof elementSchema>
 export type ElementKind = BoardElement['kind']
 
 export const FORMAT_VERSION = 1
+
+export const portSides = ['left', 'right', 'top', 'bottom', 'center'] as const
+export type PortSide = (typeof portSides)[number]
+
+export interface TemplateParam {
+  name: string
+  default: string
+}
+
+export interface TemplatePort {
+  name: string
+  /** The element inside the template that edges attach to. */
+  target: Id
+  side: PortSide
+}
+
+/** Makes a board usable as a template: the values a copy can fill in and where edges attach. */
+export interface TemplateSpec {
+  name: string
+  description: string
+  params: TemplateParam[]
+  ports: TemplatePort[]
+}
+
+export const templateSpecSchema = z.object({
+  name: idSchema,
+  description: z.string().default(''),
+  params: z.array(z.object({ name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), default: z.string().default('') })).default([]),
+  ports: z.array(z.object({ name: idSchema, target: idSchema, side: z.enum(portSides).default('center') })).default([]),
+})
+
+/** A template's board as embedded in another board: flat, so it has no definitions of its own. */
+export const definitionSchema = z.object({
+  title: z.string(),
+  formatVersion: z.number().int().positive(),
+  defaults: styleSchema.default({}),
+  elements: z.array(elementSchema),
+  template: templateSpecSchema,
+  definitions: z.record(templateKeySchema, z.never()).default({}),
+})
 
 export interface Board {
   title: string
@@ -139,16 +199,36 @@ export interface Board {
   defaults: Style
   // Z-order, bottom first. Groups render nothing, so their position only matters for printing.
   elements: BoardElement[]
+  template?: TemplateSpec
+  /**
+   * Every template version this board uses, directly or through other templates, so the file
+   * stands alone. Definitions are flat: a definition's board has none of its own.
+   */
+  definitions: Record<TemplateKey, Board>
 }
 
 export function emptyBoard(title = 'Untitled'): Board {
-  return { title, formatVersion: FORMAT_VERSION, defaults: {}, elements: [] }
+  return { title, formatVersion: FORMAT_VERSION, defaults: {}, elements: [], definitions: {} }
+}
+
+export function templateKey(name: string, version: number): TemplateKey {
+  return `${name}@${version}`
+}
+
+export function parseTemplateKey(key: TemplateKey): { name: string; version: number } {
+  const at = key.lastIndexOf('@')
+  return { name: key.slice(0, at), version: Number(key.slice(at + 1)) }
 }
 
 export function findElement(board: Board, id: Id): BoardElement | undefined {
   return board.elements.find((e) => e.id === id)
 }
 
-export function isBoxed(el: BoardElement): el is NodeElement | TextElement | ImageElement {
-  return el.kind === 'node' || el.kind === 'text' || el.kind === 'image'
+export function isBoxed(el: BoardElement): el is NodeElement | TextElement | ImageElement | InstanceElement {
+  return el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance'
+}
+
+/** Elements that have a placement (`at`): they can be placed relative to others and anchor them. */
+export function isPlaceable(el: BoardElement): el is NodeElement | TextElement | ImageElement | InstanceElement {
+  return isBoxed(el)
 }

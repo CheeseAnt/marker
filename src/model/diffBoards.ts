@@ -42,6 +42,14 @@ export function diffBoards(a: Board, b: Board): Op[] {
   if (!equal(a.defaults, b.defaults)) meta.defaults = b.defaults
   if (Object.keys(meta).length) ops.push({ op: 'board', set: meta })
 
+  // Definitions first, so new instances can use them; dropped ones go after the removes.
+  for (const [key, def] of Object.entries(b.definitions)) {
+    if (!equal(a.definitions[key], def)) ops.push({ op: 'define', key, board: def as never })
+  }
+  const undefines: Op[] = Object.keys(a.definitions)
+    .filter((key) => !(key in b.definitions))
+    .map((key) => ({ op: 'undefine', key }))
+
   // Adds first and removes last, so references are valid whenever cascades run.
   const removes: Op[] = []
   for (const el of b.elements) {
@@ -54,7 +62,7 @@ export function diffBoards(a: Board, b: Board): Op[] {
     }
   }
   for (const el of a.elements) if (!inB.has(el.id)) removes.push({ op: 'remove', id: el.id })
-  ops.push(...removes)
+  ops.push(...removes, ...undefines)
 
   // Order after the ops above: survivors keep their order and adds go on top.
   const order: Id[] = [

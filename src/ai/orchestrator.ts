@@ -4,6 +4,7 @@ import { undo as undoStep, type History } from '../history/history'
 import { commit, OpError } from '../model/apply'
 import type { Op } from '../model/ops'
 import type { Board, Id } from '../model/types'
+import type { TemplateVersion } from '../templates/operations'
 import { editArgsSchema, replyArgsSchema, toCoreOps } from './llmOps'
 import { buildContext, SYSTEM_PROMPT } from './prompt'
 import { ProviderError, type ChatMessage, type LLMProvider, type ToolCall, type ToolDef, type Usage } from './providers/types'
@@ -45,6 +46,8 @@ export interface EditRequest {
   selection: Id[]
   /** Formatted recent conversation and changes (see formatRecent). */
   recent?: string
+  /** Library templates the model may add (latest version of each). */
+  templates?: TemplateVersion[]
   signal?: AbortSignal
   onStage?: (stage: EditStage, detail: { outputTokens: number; repair: number }) => void
 }
@@ -77,7 +80,7 @@ function touchedIds(ops: Op[]): Id[] {
  */
 export async function runEdit(req: EditRequest): Promise<EditResult> {
   const messages: ChatMessage[] = [
-    { role: 'user', content: buildContext({ board: req.getBoard(), selection: req.selection, recent: req.recent }, req.prompt) },
+    { role: 'user', content: buildContext({ board: req.getBoard(), selection: req.selection, recent: req.recent, templates: req.templates }, req.prompt) },
   ]
   let usage: Usage = { inputTokens: 0, outputTokens: 0 }
 
@@ -145,7 +148,7 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
       if (!(e instanceof OpError)) throw e
       throw new ProviderError('bad-request', `Couldn't undo the last ${undoCount === 1 ? 'change' : `${undoCount} changes`}: ${e.issues[0]}`)
     }
-    const { ops, issues } = toCoreOps(board, parsed.data.ops)
+    const { ops, issues } = toCoreOps(board, parsed.data.ops, { templates: req.templates ?? [] })
     if (issues.length) {
       problems(issues)
       continue

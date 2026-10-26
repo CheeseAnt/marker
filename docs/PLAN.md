@@ -402,6 +402,28 @@ recording → transcribing → queued → building context → calling model →
 - **The model** can set per-element fonts through `style.font`, and the board font with `set_board_font`.
 - **Text measurement** estimates width per font. All preset faces are loaded on startup, then the scene is re-measured so text drawn before a face arrived isn't clipped. The text panel's code face is named "BoardBot Code" so it doesn't clash with Excalidraw's "Cascadia".
 
+**Phase 5b: templates (done, 2026-10-26)**
+- **Model:**
+  - `Board.template` (name, description, params with defaults, ports with target and side);
+  - `Board.definitions` (flat `name@version` → template board, embedded so files stand alone);
+  - an `instance` element with template key, params, placement, scale, and per-part overrides (`{text, style}`, nested parts as `disk1/box`).
+  - New ops `define`/`undefine`. Definitions no instance uses (directly or through other templates) are pruned at the end of each commit, inside the transaction, so undo restores them.
+  - Checks cover unknown templates, params, ports and override targets, plus definition cycles.
+- **DSL:** a template board has `template <name> "<description>"`, `param <name> "<default>"` and `port <name> <target> <side>` lines. Copies are `use <id> <name>@<v> [placement] [scale(n)] [with(p="v")] [override(part.text="…", part.fill=#…)]`, and definitions are `define <name>@<v> { … }` blocks at the end. Params fill `{name}` placeholders in text only (style variation is done with overrides).
+- **Compile:**
+  - copies expand recursively (depth ≤ 8) into namespaced Excalidraw ids (`web1/box`), scaled and translated from the content bounds, grouped under the copy id, with per-copy seeds;
+  - edges bind to port targets;
+  - a missing template shows a dashed placeholder.
+- **Canvas edits on copies:**
+  - moving or scaling the whole copy updates `at`/`scale`;
+  - text, style and font changes on parts become overrides;
+  - deleting all parts removes the copy;
+  - ungrouping detaches it;
+  - moving or deleting single parts is rejected and reverted, with a Detach action.
+- **Library:** in IndexedDB as DSL text per version. The Templates drawer tab shows previews with defaults filled in, Add to board, Update copies to the latest version (reporting params and overrides that no longer fit), Delete, and "Used on this board, not in your library → Save to library" (keeping the board's version number). "Save selection as template" offers a name, description, fill-in texts, connection points with sides, and the option to replace the selection with a copy (outside edges move to its ports).
+- **Model:** each request gets a catalog of templates (description, fill-ins with defaults, ports, parts), and board text is sent without `define` blocks. New ops `add_copy` (library latest, or the board's version), `update_copy` (params, place, scale, `part_text`, `part_style`) and `detach`; edges accept `copy.port`.
+- **Not yet:** a canvas badge for "update available" (shown in the Templates tab instead), `.boardlib` import/export (phase 10, with files), and editing a template visually in place. Edit a template by detaching a copy, changing it, and saving it again under the same name, which creates the next version.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

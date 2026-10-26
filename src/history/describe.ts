@@ -6,7 +6,7 @@ function nameOf(el: BoardElement | undefined, fallbackId: string): string {
   const text = el.kind === 'node' ? el.label : el.kind === 'text' ? el.text : el.kind === 'edge' || el.kind === 'group' ? el.label : undefined
   const clean = text?.replace(/\s+/g, ' ').trim()
   if (clean) return clean.length > 32 ? `“${clean.slice(0, 31)}…”` : `“${clean}”`
-  const noun = { node: 'shape', edge: 'arrow', text: 'text', group: 'group', image: 'image', draw: 'drawing' }[el.kind]
+  const noun = { node: 'shape', edge: 'arrow', text: 'text', group: 'group', image: 'image', draw: 'drawing', instance: `${el.kind === 'instance' ? el.template.split('@')[0] : ''} copy` }[el.kind]
   return `${noun} ${el.id}`
 }
 

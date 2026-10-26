@@ -1,5 +1,7 @@
 import { printBoard, printElement } from '../dsl/print'
 import { FONT_PRESETS } from '../model/fonts'
+import { parseTemplateKey } from '../model/types'
+import type { TemplateVersion } from '../templates/operations'
 import type { Board, Id } from '../model/types'
 
 /** Above this size only the selection and its neighbourhood are sent in full. */
@@ -14,6 +16,7 @@ export const SYSTEM_PROMPT = `You edit a hand-drawn whiteboard for the user. The
   group <id> ["label"] [member, member, ...]
   draw <id> at(x,y) path="<svg path>"
   image <id> asset:<id> at(x,y) size(w,h)
+  use <id> <template>@<version> [placement] [scale(n)] [with(param="value", ...)] [override(part.text="...", part.fill=#hex, ...)]
 
 Style keys: fill, stroke, width (1|2|4), line (solid|dashed|dotted), rough (0 neat, 1 normal, 2 sketchy), pattern (hachure|solid|cross|zigzag), opacity (0-100), font, fontSize, align.
 Fonts: ${FONT_PRESETS.map((f) => `${f.id} (${f.note})`).join(', ')}. A \`style default font=...\` line sets the board font (change it with set_board_font, only when asked about the whole board); an element's own font overrides it. Coordinates are pixels, x to the right, y downwards. A typical node is 160x80.
@@ -27,11 +30,14 @@ How to edit:
 - When the user agrees to something you suggested ("yes", "do that"), carry out what you proposed in your last reply.
 - To undo, or to undo something and do it another way, set undo_first to how many of the newest changes to undo, and give the replacement ops (or none for a plain undo).
 - Good colours on a whiteboard: fills #a5d8ff (blue), #b2f2bb (green), #ffec99 (yellow), #ffc9c9 (red), #d0bfff (violet), #eebefa (pink); strokes #1e1e1e, #1971c2, #2f9e44, #e03131, #f08c00.
+- "use" lines are copies of templates: reusable drawings with fill-in text and named ports. Add them with add_copy; change one copy's fill-ins, parts' text or parts' style with update_copy; attach edges to a port with "copyId.port". A copy's parts can't be moved on their own; detach the copy first if the user wants to rearrange it. Prefer a template from the catalog when the user asks for something it already draws.
 - For a request that asks a question instead of a change, or is too unclear to act on, call reply.`
 
 export interface ContextInput {
   board: Board
   selection: Id[]
+  /** Templates the model may add, newest version of each. */
+  templates?: TemplateVersion[]
   /** Recent conversation and changes, already formatted (see formatRecent). */
   recent?: string
 }
@@ -57,8 +63,29 @@ function neighbourhood(board: Board, ids: Set<Id>): Set<Id> {
 }
 
 /** The user message for a request: the board (or the relevant part of it), the selection and the request. */
-export function buildContext({ board, selection, recent }: ContextInput, request: string): string {
-  const full = printBoard(board, { hints: false })
+/** One line per template: what it is, what each copy fills in, its ports and its parts. */
+export function templateCatalog(board: Board, templates: TemplateVersion[]): string {
+  const byName = new Map<string, Board>()
+  for (const t of templates) byName.set(t.name, t.board)
+  for (const [key, def] of Object.entries(board.definitions)) {
+    const { name } = parseTemplateKey(key)
+    if (!byName.has(name)) byName.set(name, def)
+  }
+  if (byName.size === 0) return ''
+  const lines = [...byName].map(([name, def]) => {
+    const spec = def.template!
+    const params = spec.params.map((p) => `${p.name}${p.default ? ` (default "${p.default}")` : ''}`).join(', ')
+    const parts = def.elements
+      .filter((e) => e.kind !== 'group')
+      .map((e) => `${e.id} (${e.kind}${e.kind === 'node' && e.label ? ` "${e.label}"` : e.kind === 'text' ? ` "${e.text}"` : ''})`)
+      .join(', ')
+    return `- ${name}: ${spec.description || def.title}. Fill in: ${params || 'nothing'}. Ports: ${spec.ports.map((p) => p.name).join(', ') || 'none'}. Parts: ${parts}.`
+  })
+  return `Templates you can add with add_copy:\n${lines.join('\n')}`
+}
+
+export function buildContext({ board, selection, recent, templates = [] }: ContextInput, request: string): string {
+  const full = printBoard(board, { hints: false, definitions: false })
   let boardText = full
   if (full.length > FULL_BOARD_CHAR_LIMIT) {
     const focus = neighbourhood(board, new Set(selection))
@@ -84,5 +111,6 @@ export function buildContext({ board, selection, recent }: ContextInput, request
   }
   const selected = selection.length ? `Selected: ${selection.join(', ')}` : 'Nothing is selected.'
   const history = recent ? `${recent}\n\n` : ''
-  return `${history}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}\n\nRequest: ${request}`
+  const catalog = templateCatalog(board, templates)
+  return `${history}${catalog ? `${catalog}\n\n` : ''}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}\n\nRequest: ${request}`
 }

@@ -146,7 +146,7 @@ describe('runEdit', () => {
   it('offers tool schemas the model can follow', () => {
     const edit = TOOLS[0].parameters as { properties: { ops: { items: { oneOf?: unknown[]; anyOf?: unknown[] } } } }
     const variants = edit.properties.ops.items.oneOf ?? edit.properties.ops.items.anyOf
-    expect(variants).toHaveLength(10)
+    expect(variants).toHaveLength(13)
     expect(edit.properties).toHaveProperty('undo_first')
   })
 })
@@ -164,6 +164,60 @@ describe('toCoreOps', () => {
     expect(ops[1]).toEqual({ op: 'reorder', id: 'api', after: 'e1' })
     expect(ops[2]).toEqual({ op: 'board', set: { defaults: { font: 'display' } } })
     expect(issues).toEqual(['ops[1] (update "e1"): only nodes have a shape', 'ops[1] (update "e1"): nothing to change', 'ops[3] (ungroup "api"): "api" is not a group'])
+  })
+})
+
+describe('templates', () => {
+  const server = parseBoard(`board "Web server" v1
+template server "A web server"
+param name "Server"
+port in box top
+
+node box "{name}" rect at(0,0) size(160,80)
+text note "nginx" below(box,10)
+`)
+  const templates = [{ name: 'server', version: 3, board: server }]
+
+  it('lists the catalog and lets the model add, connect and adjust copies', async () => {
+    const { provider, requests } = scripted([
+      edit('Added two servers behind the API', [
+        { op: 'add_copy', template: 'server', params: { name: 'Web 1' }, place: { rel: 'right', of: 'api' } },
+        { op: 'add_copy', template: 'server', params: { name: 'Web 2' } },
+        { op: 'add_edge', from: 'api', to: 'server1.in' },
+        { op: 'add_edge', from: 'api', to: 'server2.in' },
+      ]),
+    ])
+    const result = await runEdit({ prompt: 'add two web servers', provider, getBoard: () => board, getHistory: () => emptyHistory(), selection: [], templates })
+    if (result.kind !== 'edit') throw new Error()
+    const next = commit(board, result.ops).board
+    expect(Object.keys(next.definitions)).toEqual(['server@3'])
+    expect(next.elements.filter((e) => e.kind === 'instance').map((e) => e.id)).toEqual(['server1', 'server2'])
+    expect(next.elements.find((e) => e.id === 'api_server1_in')).toMatchObject({ to: { id: 'server1', port: 'in' } })
+    const context = String(requests[0].messages[0].content)
+    expect(context).toContain('- server: A web server. Fill in: name (default "Server"). Ports: in. Parts: box (node "{name}"), note (text "nginx").')
+
+    // The board text the model sees shows copies but not the embedded definitions.
+    const { provider: p2, requests: r2 } = scripted([
+      edit('Renamed and recoloured', [{ op: 'update_copy', id: 'server2', params: { name: 'Edge' }, part_style: { box: { fill: '#ffc9c9' } }, part_text: { note: 'envoy' } }]),
+      edit('Detached server1', [{ op: 'detach', id: 'server1' }]),
+    ])
+    const second = await runEdit({ prompt: 'make server2 the edge proxy', provider: p2, getBoard: () => next, getHistory: () => emptyHistory(), selection: [], templates })
+    if (second.kind !== 'edit') throw new Error()
+    expect(String(r2[0].messages[0].content)).toContain('use server2 server@3')
+    expect(String(r2[0].messages[0].content)).not.toContain('define server@3')
+    const renamed = commit(next, second.ops).board
+    expect(renamed.elements.find((e) => e.id === 'server2')).toMatchObject({ params: { name: 'Edge' }, overrides: { box: { style: { fill: '#ffc9c9' } }, note: { text: 'envoy' } } })
+
+    const third = await runEdit({ prompt: 'detach server1', provider: p2, getBoard: () => renamed, getHistory: () => emptyHistory(), selection: [], templates })
+    if (third.kind !== 'edit') throw new Error()
+    const detached = commit(renamed, third.ops).board
+    expect(detached.elements.find((e) => e.id === 'server1')).toMatchObject({ kind: 'group' })
+    expect(detached.elements.find((e) => e.id === 'api_server1_in')).toMatchObject({ to: { id: 'server1_box' } })
+  })
+
+  it('names the templates that exist when the model asks for one that does not', () => {
+    const { issues } = toCoreOps(board, [{ op: 'add_copy', template: 'database' }], { templates })
+    expect(issues).toEqual(['ops[0] (add_copy): there is no template "database" (available: server)'])
   })
 })
 

@@ -1,8 +1,9 @@
-import { center, DEFAULT_FONT_SIZE, effectiveStyle, measureText, resolveBoxes, type Box } from '../model/geometry'
+import { center, DEFAULT_FONT_SIZE, effectiveStyle, instanceLayout, measureText, resolveBoxes, type Box } from '../model/geometry'
+import { childId } from '../templates/expand'
 import { fontPreset } from '../model/fonts'
 import { hashString } from '../model/hash'
 import { parsePath } from '../model/path'
-import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, Point, Style } from '../model/types'
+import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, InstanceElement, Point, Style } from '../model/types'
 import {
   BIND_GAP,
   DEFAULT_FILL,
@@ -143,10 +144,18 @@ function groupChains(board: Board): Map<Id, string[]> {
 }
 
 /** Compiles a board to Excalidraw elements in z-order. Deterministic for a given board. */
-export function compileBoard(board: Board): Compiled {
-  const boxes = resolveBoxes(board)
+export function compileBoard(board: Board, depth = 0): Compiled {
+  const boxes = resolveBoxes(board, depth)
   const chains = groupChains(board)
   const byId = new Map(board.elements.map((e) => [e.id, e]))
+
+  // Template copies are compiled first, so edges can attach to their ports.
+  const copies = new Map<Id, CompiledCopy>()
+  for (const el of board.elements) {
+    if (el.kind !== 'instance') continue
+    const box = boxes.get(el.id)
+    if (box) copies.set(el.id, compileCopy(board, el, box, depth))
+  }
   const out: ExElement[] = []
   const bound = new Map<Id, { id: string; type: 'arrow' | 'text' }[]>()
   const bind = (owner: Id, ref: { id: string; type: 'arrow' | 'text' }) => {
@@ -157,13 +166,24 @@ export function compileBoard(board: Board): Compiled {
 
   const endpointPoint = (end: Endpoint, toward: Point): { point: Point; bindTo?: Id } => {
     if ('point' in end) return { point: end.point }
+    const copy = copies.get(end.id)
+    if (copy) {
+      // A port binds to the element it names; a copy without a port is met at its outline.
+      const port = end.port ? copy.ports.get(end.port) : undefined
+      if (port) return { point: boundaryPoint(port.box, port.outline, toward, BIND_GAP), bindTo: port.id }
+      return { point: boundaryPoint(copy.box, 'rect', toward, BIND_GAP) }
+    }
     const box = boxes.get(end.id)
     if (!box) return { point: toward }
     return { point: boundaryPoint(box, outlineOf(byId.get(end.id)), toward, BIND_GAP), bindTo: end.id }
   }
 
   const compileEdge = (el: EdgeElement, style: Style, groupIds: string[]): ExElement[] => {
-    const rough = (end: Endpoint) => ('point' in end ? end.point : center(boxes.get(end.id) ?? { x: 0, y: 0, w: 0, h: 0 }))
+    const rough = (end: Endpoint) => {
+      if ('point' in end) return end.point
+      const port = end.port ? copies.get(end.id)?.ports.get(end.port) : undefined
+      return center(port?.box ?? boxes.get(end.id) ?? { x: 0, y: 0, w: 0, h: 0 })
+    }
     const via = el.via ?? []
     const start = endpointPoint(el.from, via[0] ?? rough(el.to))
     const end = endpointPoint(el.to, via.at(-1) ?? rough(el.from))
@@ -239,6 +259,11 @@ export function compileBoard(board: Board): Compiled {
         })
         break
       }
+      case 'instance': {
+        const copy = copies.get(el.id)
+        if (copy) out.push(...copy.elements.map((e) => ({ ...e, groupIds: [...e.groupIds, ...groupIds] })))
+        break
+      }
       case 'group':
         break
     }
@@ -246,7 +271,84 @@ export function compileBoard(board: Board): Compiled {
 
   for (const el of out) {
     const refs = bound.get(el.id)
-    if (refs) el.boundElements = refs
+    if (refs) el.boundElements = [...(el.boundElements ?? []), ...refs]
   }
   return { elements: out, boxes }
+}
+
+interface CompiledCopy {
+  elements: ExElement[]
+  box: Box
+  /** Port name to the compiled element it attaches to. */
+  ports: Map<string, { id: string; box: Box; outline: Outline }>
+}
+
+/**
+ * Expands a template copy: compiles its content, then namespaces ids ("web1/box"), moves and
+ * scales it into `box`, and groups it as one unit under the instance id. Each copy gets its own
+ * hand-drawn wobble because seeds follow the namespaced ids.
+ */
+function compileCopy(board: Board, el: InstanceElement, box: Box, depth: number): CompiledCopy {
+  const layout = instanceLayout(board, el, depth)
+  if (!layout) return missingCopy(el, box)
+  const inner = compileBoard(layout.content, depth + 1)
+  const { bounds, scale } = layout
+  const id = (child: string) => childId(el.id, child)
+  const tx = (x: number) => box.x + (x - bounds.x) * scale
+  const ty = (y: number) => box.y + (y - bounds.y) * scale
+  const rebind = (b: ExElement['startBinding']) => (b ? { ...b, elementId: id(b.elementId) } : b)
+
+  const elements = inner.elements.map((e): ExElement => {
+    const next: ExElement = {
+      ...e,
+      id: id(e.id),
+      x: tx(e.x),
+      y: ty(e.y),
+      width: e.width * scale,
+      height: e.height * scale,
+      seed: seedFor(id(e.id)),
+      versionNonce: seedFor(id(e.id)),
+      groupIds: [...e.groupIds.map(id), el.id],
+      boundElements: e.boundElements?.map((b) => ({ ...b, id: id(b.id) })) ?? null,
+    }
+    if (e.points) next.points = e.points.map(([x, y]) => [x * scale, y * scale] as const)
+    if (e.fontSize) next.fontSize = e.fontSize * scale
+    if (e.containerId) next.containerId = id(e.containerId)
+    if (e.startBinding !== undefined) next.startBinding = rebind(e.startBinding)
+    if (e.endBinding !== undefined) next.endBinding = rebind(e.endBinding)
+    return next
+  })
+
+  const ports = new Map<string, { id: string; box: Box; outline: Outline }>()
+  const def = board.definitions[el.template]
+  for (const port of def?.template?.ports ?? []) {
+    const target = inner.boxes.get(port.target)
+    if (!target) continue
+    ports.set(port.name, {
+      id: id(port.target),
+      box: { x: tx(target.x), y: ty(target.y), w: target.w * scale, h: target.h * scale },
+      outline: outlineOf(layout.content.elements.find((c) => c.id === port.target)),
+    })
+  }
+  return { elements, box, ports }
+}
+
+/** A dashed placeholder for a copy whose template is missing or nested too deeply. */
+function missingCopy(el: InstanceElement, box: Box): CompiledCopy {
+  const frame: ExElement = {
+    ...base({ ...el, id: childId(el.id, 'missing') }, 'rectangle', box, { line: 'dashed', stroke: '#c8372d' }, [el.id]),
+    roundness: null,
+  }
+  const label = textElement(
+    childId(el.id, 'missing~label'),
+    `Missing template ${el.template}`,
+    box,
+    { stroke: '#c8372d', fontSize: 16 },
+    {},
+    [el.id],
+    { id: frame.id, center: center(box) },
+    el,
+  )
+  frame.boundElements = [{ id: label.id, type: 'text' }]
+  return { elements: [frame, label], box, ports: new Map() }
 }

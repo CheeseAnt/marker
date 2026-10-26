@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { elementSchema, idSchema, styleSchema, type BoardElement, type Id } from './types'
+import { definitionSchema, elementSchema, idSchema, styleSchema, templateKeySchema, type BoardElement, type Id } from './types'
 
 /**
  * Core ops. Every change, from manual edits, the LLM, or undo, is a list of these.
@@ -8,6 +8,8 @@ import { elementSchema, idSchema, styleSchema, type BoardElement, type Id } from
  * `after` positions an element in z-order: null is the bottom, omitted on add is the top.
  * `replace` swaps an element for another with the same id (even of another kind) without
  * the cascades a remove would trigger. `board` changes the title or default style.
+ * `define` embeds (or replaces) a template version; definitions no instance uses are removed
+ * at the end of every commit, so `undefine` mostly appears in inverses.
  */
 export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add'), element: elementSchema, after: idSchema.nullable().optional() }),
@@ -16,6 +18,8 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('reorder'), id: idSchema, after: idSchema.nullable() }),
   z.object({ op: z.literal('replace'), element: elementSchema }),
   z.object({ op: z.literal('board'), set: z.object({ title: z.string(), defaults: styleSchema }).partial() }),
+  z.object({ op: z.literal('define'), key: templateKeySchema, board: definitionSchema }),
+  z.object({ op: z.literal('undefine'), key: templateKeySchema }),
 ])
 export type Op = z.infer<typeof opSchema>
 

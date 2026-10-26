@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CaptureUpdateAction, Excalidraw, Footer, hashElementsVersion, MainMenu, restoreElements } from '@excalidraw/excalidraw'
 import type { AppState, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import { diffScene } from '../compile/fromExcalidraw'
+import { diffSceneDetailed } from '../compile/fromExcalidraw'
+import { detachOps } from '../templates/detach'
+import { useToast } from '../state/toast'
 import type { ExElement } from '../compile/exTypes'
 import { OpError } from '../model/apply'
 import { DEFAULT_FONT, FONT_PRESETS, fontPreset, withBoardFont, type FontId } from '../model/fonts'
@@ -137,6 +139,12 @@ export function BoardCanvas({ onError }: Props) {
       highlightAfterRender: (ids) => {
         pendingHighlight.current = ids
       },
+      viewportCenter: () => {
+        const api = apiRef.current
+        if (!api) return { x: 0, y: 0 }
+        const { width, height, scrollX, scrollY, zoom } = api.getAppState()
+        return { x: width / 2 / zoom.value - scrollX, y: height / 2 / zoom.value - scrollY }
+      },
     })
     return () => registerCanvas(null)
   }, [])
@@ -157,8 +165,24 @@ export function BoardCanvas({ onError }: Props) {
     seenVersion.current = version
     const { board, compiled, apply } = useBoard.getState()
     try {
-      const ops = diffScene({ board, compiled, scene: scene as unknown as ExElement[] })
+      const { ops, rejected } = diffSceneDetailed({ board, compiled, scene: scene as unknown as ExElement[] })
       if (ops.length) apply(ops, 'manual')
+      if (rejected.length) {
+        // Parts of a template copy move together; put them back and offer to detach the copy.
+        if (!ops.length) render()
+        const id = rejected[0]
+        useToast.getState().show({
+          kind: 'error',
+          text: `The parts of “${id}” move together because it's a copy of a template. Detach it to edit its parts on their own.`,
+          action: {
+            label: 'Detach',
+            run: () => {
+              const current = useBoard.getState().board
+              useBoard.getState().apply(detachOps(current, id, { keepGrouped: true }), 'manual', { title: `Detached “${id}” from its template` })
+            },
+          },
+        })
+      }
     } catch (e) {
       onError(e instanceof OpError ? `Could not record that edit: ${e.issues[0]}` : String(e))
       render()
