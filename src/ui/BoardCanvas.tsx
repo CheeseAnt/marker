@@ -16,6 +16,10 @@ import { saveBoard } from '../state/file'
 import { newBoardAfterSaving, openBoardAfterSaving } from '../state/unsaved'
 import { LABEL_SUFFIX } from '../compile/exTypes'
 import { debounce } from '../storage/idb'
+import { followersOf, unionBoxes, type Box } from '../model/geometry'
+import type { Id } from '../model/types'
+import { CanvasOverlay, type FollowLink } from './CanvasOverlay'
+import { toScreen, type View } from './canvasView'
 
 const HIGHLIGHT_MS = 1600
 
@@ -42,15 +46,8 @@ async function storeImages(api: ExcalidrawImperativeAPI) {
   }
 }
 
-interface HighlightBox {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
 /** Scene-space bounds of an element, including arrow and freehand points. */
-function sceneBox(e: ExcalidrawElement): HighlightBox {
+function sceneBox(e: ExcalidrawElement): Box {
   if ('points' in e && e.points.length) {
     const xs = e.points.map((p) => p[0] + e.x)
     const ys = e.points.map((p) => p[1] + e.y)
@@ -59,9 +56,40 @@ function sceneBox(e: ExcalidrawElement): HighlightBox {
   return { x: e.x, y: e.y, w: e.width, h: e.height }
 }
 
-function toScreen(b: HighlightBox, s: AppState): HighlightBox {
-  const z = s.zoom.value
-  return { x: (b.x + s.scrollX) * z, y: (b.y + s.scrollY) * z, w: b.w * z, h: b.h * z }
+function viewOf(s: AppState): View {
+  return { scrollX: s.scrollX, scrollY: s.scrollY, zoom: s.zoom.value }
+}
+
+/** Board ids of what's selected on the canvas (labels count as their owner). */
+function selectedBoardIds(s: AppState): Id[] {
+  const ids = new Set(useBoard.getState().board.elements.map((e) => e.id))
+  const picked = [
+    ...Object.keys(s.selectedElementIds).filter((id) => s.selectedElementIds[id]),
+    ...Object.keys(s.selectedGroupIds ?? {}).filter((id) => s.selectedGroupIds[id]),
+  ].map((id) => (id.endsWith(LABEL_SUFFIX) ? id.slice(0, -LABEL_SUFFIX.length) : id))
+  return [...new Set(picked)].filter((id) => ids.has(id))
+}
+
+/**
+ * While elements are dragged, links from each to what is placed relative to it, which will
+ * follow it once it's dropped. The dragged ends use where the elements are right now.
+ */
+function followLinks(scene: readonly ExcalidrawElement[], s: AppState): FollowLink[] {
+  const { board, compiled } = useBoard.getState()
+  const dragged = new Set(selectedBoardIds(s))
+  for (const el of board.elements) if (el.kind === 'group' && dragged.has(el.id)) el.members.forEach((m) => dragged.add(m))
+  const pairs = followersOf(board, dragged)
+  if (!pairs.length) return []
+  const live = (id: Id): Box | undefined => {
+    const own = scene.find((e) => e.id === id && !e.isDeleted)
+    if (own) return sceneBox(own)
+    return unionBoxes(scene.filter((e) => !e.isDeleted && e.groupIds.includes(id)).map(sceneBox))
+  }
+  return pairs.flatMap(([anchorId, followerId]) => {
+    const anchor = dragged.has(anchorId) ? live(anchorId) : compiled.boxes.get(anchorId)
+    const follower = compiled.boxes.get(followerId)
+    return anchor && follower ? [{ anchor, follower }] : []
+  })
 }
 
 /** True while the user is mid-gesture; syncing then would fight Excalidraw's own state. */
@@ -97,7 +125,9 @@ export function BoardCanvas({ onError }: Props) {
   const pendingHighlight = useRef<string[] | null>(null)
   // The board font last pushed to Excalidraw as its font for new text.
   const defaultFamily = useRef(fontPreset(useBoard.getState().board.defaults.font).family)
-  const [highlights, setHighlights] = useState<{ key: number; boxes: HighlightBox[] } | null>(null)
+  const [highlights, setHighlights] = useState<{ key: number; boxes: Box[] } | null>(null)
+  const [view, setView] = useState<View>({ scrollX: 0, scrollY: 0, zoom: 1 })
+  const [links, setLinks] = useState<FollowLink[]>([])
   const revision = useBoard((s) => s.revision)
 
   const render = useCallback(() => {
@@ -131,13 +161,13 @@ export function BoardCanvas({ onError }: Props) {
       // Labels sit inside their shape, so the shape's ring covers them.
       const targets = elements.filter((e) => !e.isDeleted && ids.includes(e.id))
       const appState = api.getAppState()
-      let boxes = targets.map((e) => toScreen(sceneBox(e), appState))
+      let boxes = targets.map((e) => toScreen(sceneBox(e), viewOf(appState)))
       const visible = boxes.some((b) => b.x + b.w > 0 && b.y + b.h > 0 && b.x < appState.width && b.y < appState.height)
       if (!visible && targets.length) {
         // Bring off-screen changes into view; the highlight follows once scrolling settles.
         api.scrollToContent(targets, { fitToContent: false, animate: false })
         const moved = api.getAppState()
-        boxes = targets.map((e) => toScreen(sceneBox(e), moved))
+        boxes = targets.map((e) => toScreen(sceneBox(e), viewOf(moved)))
       }
       setHighlights({ key: Date.now(), boxes })
     }
@@ -154,15 +184,7 @@ export function BoardCanvas({ onError }: Props) {
     registerCanvas({
       selection: () => {
         const api = apiRef.current
-        if (!api) return []
-        const { selectedElementIds, selectedGroupIds } = api.getAppState()
-        const board = useBoard.getState().board
-        const ids = new Set(board.elements.map((e) => e.id))
-        const picked = [
-          ...Object.keys(selectedElementIds).filter((id) => selectedElementIds[id]),
-          ...Object.keys(selectedGroupIds ?? {}).filter((id) => selectedGroupIds[id]),
-        ].map((id) => (id.endsWith(LABEL_SUFFIX) ? id.slice(0, -LABEL_SUFFIX.length) : id))
-        return [...new Set(picked)].filter((id) => ids.has(id))
+        return api ? selectedBoardIds(api.getAppState()) : []
       },
       highlightAfterRender: (ids) => {
         pendingHighlight.current = ids
@@ -263,6 +285,7 @@ export function BoardCanvas({ onError }: Props) {
         initialData={initialData}
         excalidrawAPI={(api) => {
           apiRef.current = api
+          setView(viewOf(api.getAppState()))
           void loadImages(api)
           // Lets end-to-end tests check which image files the canvas has.
           if (import.meta.env.DEV) Object.assign(window, { __markerFiles: () => Object.keys(api.getFiles()) })
@@ -275,7 +298,15 @@ export function BoardCanvas({ onError }: Props) {
               render()
             })
         }}
-        onChange={() => readSoon()}
+        onChange={(scene, appState) => {
+          readSoon()
+          // Excalidraw calls onChange after every render, so state only changes when it differs.
+          const next = appState.selectedElementsAreBeingDragged ? followLinks(scene, appState) : []
+          setLinks((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next))
+        }}
+        onScrollChange={(scrollX, scrollY, zoom) =>
+          setView((v) => (v.scrollX === scrollX && v.scrollY === scrollY && v.zoom === zoom.value ? v : { scrollX, scrollY, zoom: zoom.value }))
+        }
         onPointerUp={() => setTimeout(readScene, 0)}
         // Lets Virgil and Cascadia be picked per element, matching the board font presets.
         showDeprecatedFonts
@@ -285,6 +316,7 @@ export function BoardCanvas({ onError }: Props) {
           <HistoryButtons />
         </Footer>
       </Excalidraw>
+      <CanvasOverlay view={view} links={links} />
       {highlights && (
         <div className="change-highlights" key={highlights.key} aria-hidden="true">
           {highlights.boxes.map((b, i) => (
