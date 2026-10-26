@@ -1,0 +1,19 @@
+{
+  "caseId": "add-and-connect",
+  "model": "hand-written example",
+  "recordedAt": "2026-10-26T00:00:00.000Z",
+  "responses": [
+    {
+      "text": "",
+      "toolCalls": [
+        {
+          "id": "call_1",
+          "name": "edit_board",
+          "arguments": "{\"summary\":\"Added a Redis cache for the API\",\"ops\":[{\"op\":\"add_node\",\"id\":\"cache\",\"label\":\"Redis cache\",\"place\":{\"rel\":\"right\",\"of\":\"api\"}},{\"op\":\"add_edge\",\"from\":\"api\",\"to\":\"cache\"}]}"
+        }
+      ],
+      "usage": { "inputTokens": 1500, "outputTokens": 90 },
+      "finishReason": "tool_calls"
+    }
+  ]
+}

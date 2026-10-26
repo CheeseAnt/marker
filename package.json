@@ -12,7 +12,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "playwright test",
-    "e2e:preview": "npm run build && playwright test --config playwright.preview.config.ts"
+    "e2e:preview": "npm run build && playwright test --config playwright.preview.config.ts",
+    "eval": "vitest run --config vitest.evals.config.ts",
+    "eval:live": "BOARDBOT_EVAL_LIVE=1 vitest run --config vitest.evals.config.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

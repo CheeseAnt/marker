@@ -479,6 +479,27 @@ recording → transcribing → queued → building context → calling model →
   - "Use these settings" fills the form, and Save keeps it. The stored key is never touched, and a fresh app shows "needs an API key".
 - **Not included:** the usage ledger (it has CSV export), template library and boards (files in phase 10).
 
+**Phase 10: polish (done, 2026-10-26)**
+- **Board files (`src/storage/boardFile.ts`, `src/state/file.ts`):**
+  - `.board` is the board text plus images (`#@asset <id> <mime> <WxH> <base64>`) and history (`#@history <hash> <json>`) as comment lines, so the whole file is still valid board text. History only returns if the hash matches, so a hand-edited file loses it.
+  - `.boardz` is a zip (fflate) of `board.board`, `assets/<id>`, `assets.json` and `history.json`.
+  - Open, Save, Save as and New in the main menu and on Ctrl/Cmd+O, +S and +Shift+S, using the File System Access API with a download and file-input fallback. The handle is kept in IndexedDB.
+  - Unsaved changes are judged by text hash (so undoing back to the saved state counts as saved), shown in the status strip, with a save-first prompt before New or Open.
+- **Template library files:** `.boardlib` (JSON of every template and version as board text). Import skips versions already present and adds a conflicting version as the next number.
+- **Production content security policy:** injected into built pages only. Allows this site, Azure, Hugging Face, WASM compilation and `blob:` workers; blocks plugins, form submissions and other base URLs. To meet it:
+  - Excalidraw's font path is set by `public/asset-path.js`, a classic script that runs before its module registers fonts;
+  - its esm.sh font fallback is rewritten to this site at build time;
+  - the recorder worklet is imported `?url&no-inline`, so it isn't an inlined `data:` script.
+- **Speech runtime, served once:** in development the `/ort/` files are served raw from `node_modules` by a dev-server plugin; builds import the same files through `virtual:ort-paths`, so the copy Vite emits is the only one (dist from about 93 MB to 52 MB).
+- **Offline:**
+  - a Workbox service worker (vite-plugin-pwa, injectManifest, classic `/sw.js`) precaches the app shell and board fonts (173 entries, about 10.5 MB), and caches the CJK font and speech runtime on first use;
+  - every page is served from the precache with COOP/COEP added, which gives cross-origin isolation on header-less hosts (one reload on the first visit);
+  - `clientsClaim()` makes the first visit work offline;
+  - updates are offered as a Reload toast;
+  - there's a manifest, and icons rendered from `public/icons/icon.svg` by `scripts/make-icons.mjs`.
+- **Evals (`evals/`):** 31 cases with tolerant structural checks. `npm run eval` replays `evals/recordings/*.json` (cases without one are skipped; one hand-written example is included), and `npm run eval:live` records against Azure from the `BOARDBOT_AZURE_*` env vars.
+- **Production checks:** `npm run e2e:preview` builds and runs `e2e/preview/` against `vite preview`, covering the policy (no violations), on-device speech under the policy, and opening offline.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.
