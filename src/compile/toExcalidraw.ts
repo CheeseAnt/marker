@@ -1,5 +1,5 @@
 import { center, DEFAULT_FONT_SIZE, effectiveStyle, instanceLayout, measureText, resolveBoxes, type Box } from '../model/geometry'
-import { childId } from '../templates/expand'
+import { childId, withStyleDefaults } from '../templates/expand'
 import { fontPreset } from '../model/fonts'
 import { hashString } from '../model/hash'
 import { parsePath } from '../model/path'
@@ -190,7 +190,9 @@ function groupChains(board: Board): Map<Id, string[]> {
 }
 
 /** Compiles a board to Excalidraw elements in z-order. Deterministic for a given board. */
-export function compileBoard(board: Board, depth = 0): Compiled {
+export function compileBoard(template: Board, depth = 0): Compiled {
+  // A template board shows the colours a fresh copy would have.
+  const board = withStyleDefaults(template)
   const boxes = resolveBoxes(board, depth)
   const chains = groupChains(board)
   const byId = new Map(board.elements.map((e) => [e.id, e]))

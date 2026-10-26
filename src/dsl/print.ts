@@ -1,5 +1,6 @@
 import type { Board, BoardElement, Endpoint, Hints, Placement, Point, Size, Style, StyleKey } from '../model/types'
 import { isNumber } from './tokenize'
+import { styleParam } from '../templates/expand'
 
 const STYLE_ORDER: StyleKey[] = ['fill', 'stroke', 'width', 'line', 'rough', 'pattern', 'opacity', 'font', 'fontSize', 'align']
 const BARE_VALUE = /^[A-Za-z0-9_.#%+-]+$/
@@ -42,7 +43,7 @@ export function styleAttrs(style: Style): string[] {
   for (const key of STYLE_ORDER) {
     const v = style[key]
     if (v === undefined) continue
-    out.push(key === 'line' ? String(v) : `${key}=${value(v)}`)
+    out.push(key === 'line' ? String(v) : `${key}=${styleParam(v) ? v : value(v)}`)
   }
   return out
 }

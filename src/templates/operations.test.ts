@@ -91,3 +91,12 @@ describe('copies and versions', () => {
     expect(next.elements.filter((e) => e.kind === 'instance').map((e) => (e as InstanceElement).template)).toEqual(['server@1', 'server@2'])
   })
 })
+
+describe('colour fill-ins', () => {
+  it('turns a chosen fill into a param whose default is the current colour', () => {
+    const { template } = templateFromSelection(board, ['box', 'note'], { ...draft, colours: [{ element: 'box', key: 'fill', name: 'color' }] })
+    expect(template.elements.find((e) => e.id === 'box')?.style.fill).toBe('{color}')
+    expect(template.template!.params.at(-1)).toEqual({ name: 'color', default: board.elements.find((e) => e.id === 'box')!.style.fill ?? 'transparent' })
+    expect(checkBoard(template)).toEqual([])
+  })
+})

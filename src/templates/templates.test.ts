@@ -227,3 +227,50 @@ describe('detachOps', () => {
     expect(commit(r.board, r.inverse).board).toEqual(board)
   })
 })
+
+describe('style params', () => {
+  const styled = parseBoard(`board "S" v1
+
+use a chip@1 at(0,0) with(color=#ffc9c9)
+use b chip@1 at(200,0) override(box.fill=#b2f2bb)
+use c chip@1 at(400,0)
+
+define chip@1 {
+  board "Chip" v1
+  template chip
+  param color "#a5d8ff"
+
+  node box "Chip" rect at(0,0) size(120,60) fill={color} stroke=#1e1e1e
+}
+`)
+
+  it('round-trips {param} as a style value', () => {
+    const text = printBoard(styled)
+    expect(text).toContain('fill={color}')
+    expect(parseBoard(text)).toEqual(styled)
+    expect(checkBoard(styled)).toEqual([])
+  })
+
+  it('fills colours per copy, with the default when unset, and lets overrides win', () => {
+    const scene = compileBoard(styled).elements
+    const fill = (id: string) => scene.find((e) => e.id === id)?.backgroundColor
+    expect(fill('a/box')).toBe('#ffc9c9')
+    expect(fill('b/box')).toBe('#b2f2bb')
+    expect(fill('c/box')).toBe('#a5d8ff')
+  })
+
+  it('shows the default colour on the template board itself', () => {
+    const def = styled.definitions['chip@1']
+    expect(compileBoard(def).elements.find((e) => e.id === 'box')?.backgroundColor).toBe('#a5d8ff')
+  })
+
+  it('only fills colours, and checks the values and names', () => {
+    expect(() => parseBoard('board "x" v1\nnode a "A" rect width={w}\n')).toThrow(/only fill and stroke can be filled from a param/)
+    const bad = { ...styled, elements: styled.elements.map((e) => (e.id === 'a' && e.kind === 'instance' ? { ...e, params: { color: 'very blue!' } } : e)) }
+    expect(checkBoard(bad)).toContain(
+      '"a": color is a colour, like #a5d8ff, not "very blue!"',
+    )
+    const undeclared = parseBoard('board "T" v1\ntemplate t\n\nnode a "A" rect fill={tint}\n')
+    expect(checkBoard(undeclared)).toContain('a style uses {tint}, but the template has no param "tint"')
+  })
+})

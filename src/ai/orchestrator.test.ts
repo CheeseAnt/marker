@@ -5,7 +5,8 @@ import { resolveBoxes } from '../model/geometry'
 import { emptyHistory, record } from '../history/history'
 import { toCoreOps } from './llmOps'
 import { runEdit, TOOLS } from './orchestrator'
-import { buildContext, FULL_BOARD_CHAR_LIMIT } from './prompt'
+import { buildContext, FULL_BOARD_CHAR_LIMIT, templateCatalog } from './prompt'
+import { emptyBoard } from '../model/types'
 import type { ChatRequest, ChatResult, LLMProvider } from './providers/types'
 
 const board = parseBoard(`board "Shop" v1
@@ -302,5 +303,14 @@ describe('buildContext', () => {
     expect(text).toContain('edge link n5 -> n6')
     expect(text).not.toContain('node n7 ')
     expect(text).toContain('n7 (node "Node number 7')
+  })
+})
+
+describe('templateCatalog', () => {
+  it('tells the model which fill-ins are colours and what they colour', () => {
+    const chip = parseBoard('board "Chip" v1\ntemplate chip "A coloured chip"\nparam label "Chip"\nparam color "#a5d8ff"\n\nnode box "{label}" rect at(0,0) fill={color}\n')
+    expect(templateCatalog(emptyBoard(), [{ name: 'chip', version: 1, board: chip }])).toContain(
+      'Fill in: label (default "Chip"), color (a colour: fill of box; default "#a5d8ff").',
+    )
   })
 })

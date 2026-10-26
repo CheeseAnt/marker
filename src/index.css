@@ -153,6 +153,16 @@ button {
   opacity: 0.55;
 }
 
+/* The colour a template fill-in starts as, beside its shape's name. */
+.colour-swatch {
+  display: inline-block;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  border: 1px solid var(--frame-deep);
+  border-radius: 3px;
+}
+
 /* On a template copy with a newer version: sits on its top-right corner. */
 .update-badge {
   position: absolute;

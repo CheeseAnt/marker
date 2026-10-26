@@ -20,6 +20,7 @@ import {
   type Style,
 } from '../model/types'
 import { DslError, isNumber, tokenizeLine, type Token } from './tokenize'
+import { STYLE_PARAM_KEYS, styleParam } from '../templates/expand'
 
 export const DEFAULT_GAP = 60
 const LINE_STYLES = ['solid', 'dashed', 'dotted'] as const
@@ -163,6 +164,9 @@ function parseAttrs(p: LineParser, extra: Record<string, (p: LineParser) => void
     }
     const valTok = p.next()
     if (valTok.t !== 'word' && valTok.t !== 'string') p.fail(`expected a value for "${tok.v}"`, valTok)
+    if (styleParam(valTok.v) && !(STYLE_PARAM_KEYS as readonly string[]).includes(tok.v)) {
+      p.fail(`only ${STYLE_PARAM_KEYS.join(' and ')} can be filled from a param`, valTok)
+    }
     style[tok.v] = NUMERIC_STYLE_KEYS.has(tok.v) && isNumber(valTok.v) ? Number(valTok.v) : valTok.v
   }
   const parsed = styleSchema.strict().safeParse(style)

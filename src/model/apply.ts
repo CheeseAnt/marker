@@ -1,6 +1,9 @@
 import { resolveBoxes } from './geometry'
 import { FIXED_FIELDS, MERGED_FIELDS, type Op } from './ops'
-import { definitionCycle, usedDefinitions } from '../templates/expand'
+import { definitionCycle, styleParamsIn, usedDefinitions } from '../templates/expand'
+
+/** Colours a style param may be filled with: hex, a CSS colour name, rgb()/hsl(), or transparent. */
+const COLOUR = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|(rgb|rgba|hsl|hsla)\([^)]*\))$/
 import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Endpoint, type Id, type InstanceElement } from './types'
 
 export class OpError extends Error {
@@ -280,6 +283,10 @@ function checkInstance(board: Board, el: InstanceElement): string[] {
       issues.push(`"${el.id}": ${spec.name} has no parameter "${name}" (it has ${spec.params.map((p) => p.name).join(', ') || 'none'})`)
     }
   }
+  for (const name of styleParamsIn(def)) {
+    const value = el.params[name] ?? spec.params.find((p) => p.name === name)?.default
+    if (value !== undefined && !COLOUR.test(value)) issues.push(`"${el.id}": ${name} is a colour, like #a5d8ff, not "${value}"`)
+  }
   for (const path of Object.keys(el.overrides)) {
     const child = path.split('/')[0]
     if (!def.elements.some((c) => c.id === child)) issues.push(`"${el.id}" overrides "${path}", which ${spec.name} doesn't contain`)
@@ -297,6 +304,9 @@ function checkTemplates(board: Board, withDefinitions: boolean): string[] {
     }
     const names = board.template.params.map((p) => p.name)
     if (new Set(names).size !== names.length) issues.push('template parameters must have different names')
+    for (const name of styleParamsIn(board)) {
+      if (!names.includes(name)) issues.push(`a style uses {${name}}, but the template has no param "${name}"`)
+    }
   }
   if (!withDefinitions) return issues
   for (const [key, def] of Object.entries(board.definitions)) {
