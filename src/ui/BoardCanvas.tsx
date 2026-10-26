@@ -18,9 +18,9 @@ import { saveBoard } from '../state/file'
 import { newBoardAfterSaving, openBoardAfterSaving } from '../state/unsaved'
 import { LABEL_SUFFIX } from '../compile/exTypes'
 import { debounce } from '../storage/idb'
-import { followersOf, unionBoxes, type Box } from '../model/geometry'
+import type { Box } from '../model/geometry'
 import type { Id } from '../model/types'
-import { CanvasOverlay, type FollowLink } from './CanvasOverlay'
+import { CanvasOverlay } from './CanvasOverlay'
 import { toScreen, type View } from './canvasView'
 import { THEME_LABELS, useTheme } from './theme'
 import { useSettings } from '../settings/store'
@@ -94,28 +94,6 @@ function selectedBoardIds(s: AppState): Id[] {
   return [...new Set(picked)].filter((id) => ids.has(id))
 }
 
-/**
- * While elements are dragged, links from each to what is placed relative to it, which will
- * follow it once it's dropped. The dragged ends use where the elements are right now.
- */
-function followLinks(scene: readonly ExcalidrawElement[], s: AppState): FollowLink[] {
-  const { board, compiled } = useBoard.getState()
-  const dragged = new Set(selectedBoardIds(s))
-  for (const el of board.elements) if (el.kind === 'group' && dragged.has(el.id)) el.members.forEach((m) => dragged.add(m))
-  const pairs = followersOf(board, dragged)
-  if (!pairs.length) return []
-  const live = (id: Id): Box | undefined => {
-    const own = scene.find((e) => e.id === id && !e.isDeleted)
-    if (own) return sceneBox(own)
-    return unionBoxes(scene.filter((e) => !e.isDeleted && e.groupIds.includes(id)).map(sceneBox))
-  }
-  return pairs.flatMap(([anchorId, followerId]) => {
-    const anchor = dragged.has(anchorId) ? live(anchorId) : compiled.boxes.get(anchorId)
-    const follower = compiled.boxes.get(followerId)
-    return anchor && follower ? [{ anchor, follower }] : []
-  })
-}
-
 /** True while the user is mid-gesture; syncing then would fight Excalidraw's own state. */
 function isInteracting(s: AppState): boolean {
   return Boolean(
@@ -156,7 +134,6 @@ export function BoardCanvas({ onError }: Props) {
   const defaultFamily = useRef(fontPreset(useBoard.getState().board.defaults.font).family)
   const [highlights, setHighlights] = useState<{ key: number; boxes: Box[] } | null>(null)
   const [view, setView] = useState<View>({ scrollX: 0, scrollY: 0, zoom: 1 })
-  const [links, setLinks] = useState<FollowLink[]>([])
   const revision = useBoard((s) => s.revision)
   const theme = useTheme()
 
@@ -384,12 +361,7 @@ export function BoardCanvas({ onError }: Props) {
               render()
             })
         }}
-        onChange={(scene, appState) => {
-          readSoon()
-          // Excalidraw calls onChange after every render, so state only changes when it differs.
-          const next = appState.selectedElementsAreBeingDragged ? followLinks(scene, appState) : []
-          setLinks((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next))
-        }}
+        onChange={() => readSoon()}
         onScrollChange={(scrollX, scrollY, zoom) =>
           setView((v) => (v.scrollX === scrollX && v.scrollY === scrollY && v.zoom === zoom.value ? v : { scrollX, scrollY, zoom: zoom.value }))
         }
@@ -402,7 +374,7 @@ export function BoardCanvas({ onError }: Props) {
           <HistoryButtons />
         </Footer>
       </Excalidraw>
-      <CanvasOverlay view={view} links={links} />
+      <CanvasOverlay view={view} />
       {highlights && (
         <div className="change-highlights" key={highlights.key} aria-hidden="true">
           {highlights.boxes.map((b, i) => (

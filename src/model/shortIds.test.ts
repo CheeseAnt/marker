@@ -11,7 +11,7 @@ describe('short ids for hand-drawn elements', () => {
   const board = parseBoard(`board "s" v1
 node rect1 "Taken" rect at(0,0)
 node ${LONG} "Drawn" rect at(200,0)
-node api "API" ellipse below(${LONG},60)
+node api "API" ellipse at(200,140)
 edge x${LONG2} ${LONG} -> api
 group g [${LONG}, api]
 frame f "Area" [${LONG}]
@@ -28,7 +28,7 @@ frame f "Area" [${LONG}]
 
 node rect1 "Taken" rect at(0,0)
 node rect2 "Drawn" rect at(200,0)
-node api "API" ellipse below(rect2,60)
+node api "API" ellipse at(200,140)
 edge arrow1 rect2 -> api
 group g [rect2, api]
 frame f "Area" [rect2]

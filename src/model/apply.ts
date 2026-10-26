@@ -196,6 +196,36 @@ function cascadeFor(board: Board, id: Id): Op[] {
   return ops
 }
 
+/**
+ * Ops that turn relative placements into absolute ones. `below(api,80)` only says where
+ * something goes when it's placed; after that it stays put however its anchor moves (groups
+ * are for moving things together). Elements anchored, directly or through others, to one with
+ * no position yet are left until it has one, as are broken or cyclic anchors.
+ */
+export function relativePins(board: Board): Op[] {
+  const byId = new Map(board.elements.map((e) => [e.id, e]))
+  const placementOf = (el: BoardElement) =>
+    el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance' ? el.at : undefined
+  const settled = (id: Id, seen = new Set<Id>()): boolean => {
+    const el = byId.get(id)
+    if (!el || seen.has(id)) return false
+    if (el.kind === 'draw') return true
+    const p = placementOf(el)
+    if (p?.kind !== 'rel') return p?.kind === 'at'
+    seen.add(id)
+    return settled(p.of, seen)
+  }
+  const ops: Op[] = []
+  let boxes: ReturnType<typeof resolveBoxes> | undefined
+  for (const el of board.elements) {
+    if (placementOf(el)?.kind !== 'rel' || !settled(el.id)) continue
+    boxes ??= resolveBoxes(board)
+    const box = boxes.get(el.id)
+    if (box) ops.push({ op: 'update', id: el.id, set: { at: { kind: 'at', x: Math.round(box.x), y: Math.round(box.y) } } })
+  }
+  return ops
+}
+
 /** Structural problems that individual ops cannot see. Messages are written for the LLM. */
 export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): string[] {
   const issues: string[] = []
@@ -329,7 +359,8 @@ function unusedDefinitions(board: Board): string[] {
 }
 
 /**
- * Applies a list of ops as one unit: cascades removals, then checks integrity.
+ * Applies a list of ops as one unit: cascades removals, pins relative placements, then checks
+ * integrity.
  * Throws OpError (with every issue) and leaves the input board untouched on failure.
  */
 export function commit(board: Board, ops: readonly Op[]): Applied {
@@ -363,6 +394,7 @@ export function commit(board: Board, ops: readonly Op[]): Applied {
   if (applied.some((o) => o.op === 'remove' || o.op === 'replace' || o.op === 'update' || o.op === 'define')) {
     for (const key of unusedDefinitions(current)) run({ op: 'undefine', key })
   }
+  for (const op of relativePins(current)) run(op)
   const issues = checkBoard(current)
   if (issues.length) throw new OpError(issues)
   return { board: current, ops: applied, inverse }

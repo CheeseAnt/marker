@@ -135,24 +135,6 @@ button {
   z-index: 2;
 }
 
-/* While an element is dragged: what is placed relative to it, and will follow it. */
-.follow-links {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.follow-link line,
-.follow-link rect {
-  fill: none;
-  stroke: var(--marker-blue);
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-  stroke-linecap: round;
-  opacity: 0.55;
-}
-
 /* The colour a template fill-in starts as, beside its shape's name. */
 .colour-swatch {
   display: inline-block;

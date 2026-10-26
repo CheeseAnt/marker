@@ -95,7 +95,7 @@ draw d1 stroke=#c00 width=2 path="M10 10 Q 40 5 60 30 …"   # freehand, SVG-pat
 ```
 
 - **Shapes:** `rect`, `ellipse`, `diamond`, `cylinder` (composite), `sticky`, `line`/`arrow`, `text`, `image`, `draw` (freehand), `frame`, and `group`.
-- **Relative placement** (`below(x,gap)`, `right(x,gap)`, or no position at all) is resolved at compile time by **elkjs** auto-layout. This is important because LLMs are poor at absolute coordinates.
+- **Relative placement** (`below(x,gap)`, `right(x,gap)`, or no position at all) is resolved into a position when the element is placed, with **elkjs** auto-layout for elements with no position. This is important because LLMs are poor at absolute coordinates.
 - **Canonical printer:** `print(parse(text)) === text` for canonical input. Property tests check `decompile(compile(model)) ≅ model`.
 - **Template instances:** the `use` statement, plus embedded `define` blocks. See §1b.
 - **Images:** a `.board` file references `asset:<sha256>`. Two save modes:
@@ -335,7 +335,7 @@ recording → transcribing → queued → building context → calling model →
 **Phase 2 (done, 2026-10-26)**
 - **Parser:** hand-written instead of peggy. The format is line-based, so a small tokenizer and parser are enough and avoid a codegen step. Errors carry `line:col`.
 - **Core ops:** the core set is `add`, `update` (with style and hints merged; `null` removes), `remove` (cascades to edges, groups and relative dependents), `reorder` (`after`), `replace` (kind change under the same id) and `board` (title and default style). The named ops the LLM will use in phase 5 (`move`, `restyle` and so on) will be thin wrappers over these. `commit()` applies a list atomically, checks integrity, and returns inverse ops.
-- **Relative placement is live:** `below(api,80)` follows `api` when it moves. Dragging or resizing a dependent pins it to `at(x,y)`.
+- **Relative placement is one-shot:** `commit()` pins `below(api,80)` to the `at(x,y)` it resolves to, so it doesn't follow `api` afterwards. Groups are how things move together. Placements relative to an element with no position yet wait until it has one.
 - **Compiler and decompiler:**
   - `compileBoard` is our own deterministic compiler: stable ids, seeds from an id hash, labels as `<id>~label`, our own arrow routing.
   - `diffScene` compares the live Excalidraw scene against `compileBoard(board)`, so an untouched scene produces no ops.
@@ -509,7 +509,7 @@ recording → transcribing → queued → building context → calling model →
 - **Prompt box:** written in Comic Shanns (the "Code" preset), with `autocomplete="off"` so the browser doesn't offer earlier requests.
 - **Room for arrow labels:** ELK gets each edge label's size; a group placed below its anchor moves further down for a labelled arrow; a model placement with no gap widens to the label's width (or height) plus 40px.
 - **`undo_first` tied to send time:** each request keeps the newest changes from when it was sent and builds "Recent changes" from them. `undo_first` undoes those, only while they're still the newest; otherwise the request fails, pointing to History.
-- **Follow links:** relative placement stays live (the open question is settled). While something is dragged, a dashed link runs to each element that will follow it. They're drawn by `CanvasOverlay`, which tracks Excalidraw's scroll and zoom.
+- **Follow links:** relative placement stayed live, with a dashed link while dragging to each element that would follow. Since removed: placement is now pinned when committed (see Decided).
 - **Cylinders:** `cylinder` compiles to an invisible rectangle carrying the id, bindings and label, plus a closed outline (`~body`) and a rim (`~rim`), grouped under the node. The label's container is the band between the rims, and the outline goes beneath it, since Excalidraw keeps a label just above its container. Moves, resizes and recolours are read from the outline.
 - **Frames:** `frame <id> "<name>" [members] [at(x,y) size(w,h)]` compiles to an Excalidraw frame. Without a box it wraps its members plus 40px padding. Membership is read back from `frameId`, frames drawn by hand are adopted, and the model has a `frame` op.
 - **Short ids:** two seconds after the canvas goes quiet, elements drawn by hand are renamed (`rect1`, `arrow2`, …) with a new core `rename` op, folded into the user's newest canvas edit so it undoes with it.
@@ -559,7 +559,7 @@ Everything still put off, in one place. Each item says where it came from and ro
 - **More providers** (§4). OpenAI, Anthropic, Gemini and local models fit behind the provider interface; only Azure AI Foundry is built.
 
 ### Decided
-- **Live relative placement:** kept live, with follow links while dragging.
+- **Relative placement:** pinned to `at(x,y)` when committed rather than kept live. Hidden followers made moves surprising; group elements to move them together.
 - **Editing a template in place:** not needed; detach a copy, change it, and save it under the same name.
 
 ### Answered or still open from the original plan
