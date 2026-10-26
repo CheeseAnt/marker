@@ -121,27 +121,6 @@ function placementOf(el: BoardElement): Placement | undefined {
   return el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance' ? el.at : undefined
 }
 
-/**
- * Elements that follow `moved` because they are placed relative to it, directly or through
- * another follower, as [anchor, follower] pairs. Elements in `moved` themselves are left out.
- */
-export function followersOf(board: Board, moved: Iterable<Id>): [Id, Id][] {
-  const movedSet = new Set(moved)
-  const reached = new Set(movedSet)
-  const pairs: [Id, Id][] = []
-  for (let grew = true; grew; ) {
-    grew = false
-    for (const el of board.elements) {
-      const p = placementOf(el)
-      if (p?.kind !== 'rel' || !reached.has(p.of) || reached.has(el.id)) continue
-      reached.add(el.id)
-      pairs.push([p.of, el.id])
-      grew = true
-    }
-  }
-  return pairs
-}
-
 function relativeBox(of: Box, size: Size, p: Extract<Placement, { kind: 'rel' }>): Box {
   const cx = of.x + of.w / 2
   const cy = of.y + of.h / 2
@@ -172,8 +151,9 @@ export function unionBoxes(boxes: Box[]): Box | undefined {
 
 /**
  * Resolves the box of every placeable element (nodes, text, images, drawings), then groups.
- * Relative placements follow their anchor; unplaced elements and broken or cyclic anchors
- * fall back to a column right of the placed content, so compile never fails.
+ * Relative placements resolve against their anchor (commit pins them to absolute positions
+ * once they do); unplaced elements and broken or cyclic anchors fall back to a column right of
+ * the placed content, so compile never fails.
  */
 export function resolveBoxes(board: Board, depth = 0): Map<Id, Box> {
   const byId = new Map(board.elements.map((e) => [e.id, e]))

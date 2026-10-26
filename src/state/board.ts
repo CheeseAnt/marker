@@ -13,9 +13,21 @@ import {
   type Step,
   type Transaction,
 } from '../history/history'
-import { commit } from '../model/apply'
+import { commit, OpError, relativePins } from '../model/apply'
 import type { Op } from '../model/ops'
 import { emptyBoard, type Board } from '../model/types'
+
+/** Boards saved while relative placement was live, with it pinned where it was. */
+function pinned(board: Board): Board {
+  const pins = relativePins(board)
+  if (!pins.length) return board
+  try {
+    return commit(board, pins).board
+  } catch (e) {
+    if (e instanceof OpError) return board
+    throw e
+  }
+}
 
 export type { ChangeSource } from '../history/history'
 
@@ -114,7 +126,8 @@ export const useBoard = create<BoardState>((set, get) => {
     undo: () => move(undo),
     redo: () => move(redo),
     jumpTo: (id) => move((board, history) => jumpTo(board, history, id)),
-    load: (board, history = emptyHistory()) => {
+    load: (loaded, history = emptyHistory()) => {
+      const board = pinned(loaded)
       set({ board, history, compiled: compileBoard(board), revision: get().revision + 1, lastSource: 'system' })
     },
   }

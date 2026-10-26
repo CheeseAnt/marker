@@ -254,11 +254,13 @@ describe('attachments', () => {
     expect(content[0].text).toContain('Attached images, in the order they follow: 1. "logo.png" (asset abc123, 800x400). Place one on the board with add_image.')
     expect(content[1].dataUrl).toBe(logo.dataURL)
     if (result.kind !== 'edit') throw new Error()
+    // Placed right of the selected API, then pinned there.
+    const api = resolveBoxes(board).get('api')!
     expect(commit(board, result.ops).board.elements.find((e) => e.id === 'logo')).toMatchObject({
       kind: 'image',
       asset: 'abc123',
       size: { w: 320, h: 160 },
-      at: { kind: 'rel', dir: 'right', of: 'api' },
+      at: { kind: 'at', x: api.x + api.w + 60, y: Math.round(api.y + api.h / 2 - 80) },
     })
   })
 

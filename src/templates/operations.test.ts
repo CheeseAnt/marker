@@ -12,7 +12,7 @@ style default font=normal
 
 node lb "Load balancer" rect at(0,0) size(200,60)
 node box "Web" rect at(300,200) size(160,80)
-text note "nginx 1.27" below(box,10)
+text note "nginx 1.27" at(330,290)
 edge inner box -> note
 edge e1 lb -> box
 edge e2 lb -> note

@@ -11,7 +11,7 @@ const BOARD = `board "Racks" v1
 
 node lb "Load balancer" rect at(0,0) size(200,60)
 use web1 server@2 at(0,150) with(name="Web 1")
-use web2 server@2 right(web1,60) scale(1.5) with(name="Web 2") override(box.text="Edge box", box.fill=#ffc9c9)
+use web2 server@2 at(341,115) scale(1.5) with(name="Web 2") override(box.text="Edge box", box.fill=#ffc9c9)
 edge e1 lb -> web1.in
 edge e2 lb -> web2
 

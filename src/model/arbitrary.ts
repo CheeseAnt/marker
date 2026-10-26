@@ -1,5 +1,6 @@
 // Test-only fast-check generators for valid boards.
 import fc from 'fast-check'
+import { commit } from './apply'
 import { FONT_IDS } from './fonts'
 import type { Board, BoardElement, Endpoint, Hints, Placement, Style } from './types'
 
@@ -154,6 +155,9 @@ export const boardArb: fc.Arbitrary<Board> = fc
     const definitions: Board['definitions'] = usesTemplate ? { 'box@1': BOX_TEMPLATE } : {}
     return { title, formatVersion: 1, defaults: {}, elements, definitions }
   })
+
+/** Generated boards as commit leaves them, with relative placements pinned where they resolve. */
+export const committedBoardArb: fc.Arbitrary<Board> = boardArb.map((b) => commit(b, []).board)
 
 /** The one template generated boards use: a labelled box with a port. */
 export const BOX_TEMPLATE: Board = {

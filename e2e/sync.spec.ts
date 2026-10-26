@@ -35,7 +35,8 @@ test('board text renders, stays stable, picks up drags, and survives reload', as
   // Rendering the board must not feed back into spurious "manual" edits.
   await page.waitForTimeout(1200)
   expect((await boardText(page)).revision).toBe(settled.revision)
-  await expect(page.getByRole('textbox', { name: 'Board text' })).toHaveValue(BOARD)
+  // Placing Postgres below the API gives it a position of its own.
+  await expect(page.getByRole('textbox', { name: 'Board text' })).toHaveValue(/\nnode db "Postgres" ellipse at\(\d+,\d+\)\n/)
   await page.screenshot({ path: 'e2e/screenshots/board.png' })
 
   // Drag the API node 100px right on the canvas.
@@ -46,14 +47,15 @@ test('board text renders, stays stable, picks up drags, and survives reload', as
   await page.mouse.move(box.x + 210, box.y + 165)
   await page.mouse.down()
   await page.mouse.move(box.x + 260, box.y + 165, { steps: 5 })
-  // Postgres is placed below the API, so a link shows that it will follow.
-  await expect(page.locator('.follow-link')).toHaveCount(1)
   await page.mouse.move(box.x + 310, box.y + 165, { steps: 5 })
   await page.mouse.up()
-  await expect(page.locator('.follow-link')).toHaveCount(0)
   await page.waitForTimeout(800)
-  const after = (await boardText(page)).board as { elements: { id: string; at?: { x: number } }[] }
+  const after = (await boardText(page)).board as { elements: { id: string; at?: { x: number; y: number } }[] }
   expect(after.elements.find((e) => e.id === 'api')?.at?.x).toBeCloseTo(300, 0)
+  // Postgres was placed below the API, but stays put when the API moves.
+  const dbAt = (b: unknown) => (b as typeof after).elements.find((e) => e.id === 'db')?.at
+  expect(dbAt(settled.board)).toMatchObject({ kind: 'at' })
+  expect(dbAt(after)).toEqual(dbAt(settled.board))
   await page.screenshot({ path: 'e2e/screenshots/dragged.png' })
 
   await page.waitForTimeout(600)

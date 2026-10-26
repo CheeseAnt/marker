@@ -1,7 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { commit } from './apply'
-import { boardArb } from './arbitrary'
+import { committedBoardArb as boardArb } from './arbitrary'
 import { diffBoards } from './diffBoards'
 
 describe('diffBoards', () => {
