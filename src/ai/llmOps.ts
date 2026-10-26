@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { FONT_IDS, withBoardFont } from '../model/fonts'
+import { edgeLabelSize, LABEL_MARGIN } from '../model/geometry'
 import type { Op } from '../model/ops'
 import { detachOps } from '../templates/detach'
 import { insertCopyOps, type TemplateVersion } from '../templates/operations'
@@ -30,7 +31,7 @@ const placeSchema = z
     }),
     z.object({ x: z.number(), y: z.number() }).describe('Absolute top-left position. Prefer relative placement.'),
   ])
-  .describe('Where to put the element. Omit to let BoardBot lay it out next to what it connects to.')
+  .describe('Where to put the element. Omit to let Marker lay it out next to what it connects to.')
 
 const sizeSchema = z.object({ w: z.number().positive(), h: z.number().positive() })
 
@@ -49,7 +50,7 @@ const style = styleSchema.describe(
   'Visual style. Colours are hex like #1971c2. fill is the background, stroke the outline and text colour.',
 )
 
-const shape = z.enum(shapes).describe('rect, ellipse, diamond, or sticky (a sticky note).')
+const shape = z.enum(shapes).describe('rect, ellipse, diamond, sticky (a sticky note), or cylinder (a database or other store).')
 
 export const llmOpSchema = z.discriminatedUnion('op', [
   z.object({
@@ -159,6 +160,28 @@ function toPlacement(place: z.infer<typeof placeSchema>): Placement {
 }
 
 /**
+ * A label on a short arrow covers most of it. Where the model left the gap to its default and
+ * a labelled edge joins the element to its anchor, the gap grows to fit the label.
+ */
+function widenLabelledGaps(board: Board, ops: Op[], ids: Set<Id>) {
+  if (ids.size === 0) return
+  const edges = [...board.elements, ...ops.flatMap((o) => (o.op === 'add' ? [o.element] : []))].filter((e) => e.kind === 'edge')
+  const label = (a: Id, b: Id) =>
+    edges
+      .filter((e) => 'id' in e.from && 'id' in e.to && ((e.from.id === a && e.to.id === b) || (e.from.id === b && e.to.id === a)))
+      .map((e) => edgeLabelSize(board, e))
+      .filter((size) => size !== undefined)
+  for (const op of ops) {
+    const at = op.op === 'add' && 'at' in op.element ? op.element.at : op.op === 'update' ? (op.set.at as Placement | undefined) : undefined
+    const id = op.op === 'add' ? op.element.id : op.op === 'update' ? op.id : undefined
+    if (!id || !ids.has(id) || !at || !('kind' in at) || at.kind !== 'rel') continue
+    const horizontal = at.dir === 'left' || at.dir === 'right'
+    const extent = Math.max(0, ...label(id, at.of).map((size) => (horizontal ? size.w : size.h)))
+    if (extent) at.gap = Math.max(at.gap, extent + LABEL_MARGIN)
+  }
+}
+
+/**
  * Translates model ops into core ops against `board`. Problems the model can fix are returned
  * as `issues` (written for the model) rather than thrown.
  */
@@ -189,6 +212,12 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
     return id
   }
   const empty = { style: {}, hints: {} }
+  // Elements placed relative to another with the default gap, which may need widening below.
+  const defaultGap = new Set<Id>()
+  const placeFor = (place: z.infer<typeof placeSchema>, id: Id) => {
+    if ('rel' in place && place.gap === undefined) defaultGap.add(id)
+    return toPlacement(place)
+  }
 
   llmOps.forEach((o, i) => {
     const at = `ops[${i}] (${o.op}${'id' in o && o.id ? ` "${o.id}"` : ''})`
@@ -204,7 +233,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
             id: o.id,
             label: o.label,
             shape: o.shape ?? 'rect',
-            ...(o.place && { at: toPlacement(o.place) }),
+            ...(o.place && { at: placeFor(o.place, o.id) }),
             ...(o.size && { size: o.size }),
             style: o.style ?? {},
           },
@@ -213,7 +242,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
       case 'add_text':
         used.add(o.id)
         known.set(o.id, 'text')
-        ops.push({ op: 'add', element: { ...empty, kind: 'text', id: o.id, text: o.text, ...(o.place && { at: toPlacement(o.place) }), style: o.style ?? {} } })
+        ops.push({ op: 'add', element: { ...empty, kind: 'text', id: o.id, text: o.text, ...(o.place && { at: placeFor(o.place, o.id) }), style: o.style ?? {} } })
         break
       case 'add_edge': {
         const id = o.id && !used.has(o.id) ? (used.add(o.id), o.id) : fresh(`${o.from}_${o.to}`.replace(/\./g, '_'))
@@ -251,7 +280,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
           else issues.push(`${at}: only nodes have a shape`)
         }
         if (o.place) {
-          if (kind === 'node' || kind === 'text' || kind === 'image' || kind === 'instance') set.at = toPlacement(o.place)
+          if (kind === 'node' || kind === 'text' || kind === 'image' || kind === 'instance') set.at = placeFor(o.place, o.id)
           else if (kind === 'draw' && !('rel' in o.place)) set.at = { x: o.place.x, y: o.place.y }
           else issues.push(`${at}: a ${kind} can't be placed that way`)
         }
@@ -283,7 +312,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
         }
         const id = o.id && !used.has(o.id) ? (used.add(o.id), o.id) : nextNumbered(o.template, used)
         known.set(id, 'instance')
-        const place = o.place && toPlacement(o.place)
+        const place = o.place && placeFor(o.place, id)
         if (fromLibrary) {
           ops.push(...insertCopyOps(board, fromLibrary, { id, params: o.params, ...(place && { at: place }), ...(o.scale && { scale: o.scale }) }))
         } else {
@@ -302,7 +331,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
         }
         const set: Record<string, unknown> = {}
         if (o.params) set.params = { ...copy.params, ...o.params }
-        if (o.place) set.at = toPlacement(o.place)
+        if (o.place) set.at = placeFor(o.place, o.id)
         if (o.scale) set.scale = o.scale
         if (o.part_text || o.part_style) {
           const overrides = structuredClone(copy.overrides)
@@ -334,7 +363,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
         const fit = Math.min(1, IMAGE_DEFAULT_SIDE / Math.max(natural.width, natural.height, 1))
         const size = o.size ?? { w: Math.round(natural.width * fit) || IMAGE_DEFAULT_SIDE, h: Math.round(natural.height * fit) || IMAGE_DEFAULT_SIDE }
         const position: Placement = o.place
-          ? toPlacement(o.place)
+          ? placeFor(o.place, o.id)
           : ctx.anchor
             ? { kind: 'rel', dir: 'right', of: ctx.anchor, gap: 60 }
             : { kind: 'at', x: Math.round((ctx.center?.x ?? 0) - size.w / 2), y: Math.round((ctx.center?.y ?? 0) - size.h / 2) }
@@ -368,6 +397,7 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
       }
     }
   })
+  widenLabelledGaps(board, ops, defaultGap)
   return { ops, issues }
 }
 

@@ -1,6 +1,6 @@
 import { useToast } from './state/toast'
 
-const RELOADED_FOR_ISOLATION = 'boardbot.reloadedForIsolation'
+const RELOADED_FOR_ISOLATION = 'marker.reloadedForIsolation'
 
 /**
  * Registers the offline service worker (production builds only). On a host that doesn't send the
@@ -20,7 +20,7 @@ export async function registerServiceWorker() {
     const offerUpdate = (worker: ServiceWorker) =>
       useToast.getState().show({
         kind: 'reply',
-        text: 'A new version of BoardBot is ready.',
+        text: 'A new version of Marker is ready.',
         action: {
           label: 'Reload',
           run: () => {

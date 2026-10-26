@@ -1,7 +1,7 @@
-# BoardBot: plan for an AI-edited whiteboard
+# Marker: plan for an AI-edited whiteboard
 
 ## Context
-This is a new project in an empty repo (`/Users/anton/Documents/git/boardbot`). The goal is a browser-only virtual whiteboard with a hand-drawn look. Users edit it **first through natural language** (typed or spoken), and an external LLM turns each request into diagram changes. Manual editing stays available. Other requirements:
+This is a new project in an empty repo (`/Users/anton/Documents/git/marker`). The goal is a browser-only virtual whiteboard with a hand-drawn look. Users edit it **first through natural language** (typed or spoken), and an external LLM turns each request into diagram changes. Manual editing stays available. Other requirements:
 - Model providers are interchangeable, chosen by a setting plus an API key. The first one is **Azure AI Foundry**.
 - A board is fully contained in a text file that compiles to canvas elements and decompiles back.
 - A change log drives undo and redo.
@@ -259,7 +259,7 @@ recording → transcribing → queued → building context → calling model →
 
 ## 8. Settings export and import
 
-- **Export:** a `boardbot-settings.json` file `{schema: 'boardbot-settings', version: 1, exportedAt, settings}`. It contains:
+- **Export:** a `marker-settings.json` file `{schema: 'marker-settings', version: 1, exportedAt, settings}`. It contains:
   - provider configs (endpoint, deployments, API version, active provider);
   - voice mode and on-device model choice;
   - job concurrency;
@@ -384,7 +384,7 @@ recording → transcribing → queued → building context → calling model →
   - a toast says what changed, with Undo (which only undoes if it's still the latest change);
   - replies and errors show in the toast with Try again;
   - changed shapes get a fading marker ring instead of being selected, because selecting opens Excalidraw's style panel over the board.
-- **Testing:** unit tests use a scripted provider, and E2E tests use a mocked Azure (edit and undo, reply, repair, cancel). `e2e/live.spec.ts` runs one real request when the `BOARDBOT_AZURE_*` env vars are set.
+- **Testing:** unit tests use a scripted provider, and E2E tests use a mocked Azure (edit and undo, reply, repair, cancel). `e2e/live.spec.ts` runs one real request when the `MARKER_AZURE_*` env vars are set.
 - **Still to do:** the ~30-prompt eval set. It needs live runs to record responses first.
 - **Recent context and follow-ups (done):** `src/ai/recent.ts` adds two sections to each request:
   - "Recent conversation": up to 4 finished requests from the last 30 minutes, each with the reply text, the change made, the error or the cancellation. This makes "yes, do that" work.
@@ -400,7 +400,7 @@ recording → transcribing → queued → building context → calling model →
 - **Board font:** `style default font=…`, set from Excalidraw's main menu ("Board font", each option shown in its own face). It's one undoable step, and Excalidraw's font for new text follows it.
 - **Per element:** `font=` on any node, edge label or text. Picking a font in Excalidraw's style panel is recorded on that element (deprecated faces are enabled so Virgil and Cascadia can be picked). A face outside the presets is kept as a `fontFamily` hint.
 - **The model** can set per-element fonts through `style.font`, and the board font with `set_board_font`.
-- **Text measurement** estimates width per font. All preset faces are loaded on startup, then the scene is re-measured so text drawn before a face arrived isn't clipped. The text panel's code face is named "BoardBot Code" so it doesn't clash with Excalidraw's "Cascadia".
+- **Text measurement** estimates width per font. All preset faces are loaded on startup, then the scene is re-measured so text drawn before a face arrived isn't clipped. The text panel's code face is named "Marker Code" so it doesn't clash with Excalidraw's "Cascadia".
 
 **Phase 5b: templates (done, 2026-10-26)**
 - **Model:**
@@ -425,7 +425,7 @@ recording → transcribing → queued → building context → calling model →
 - **Not yet:** a canvas badge for "update available" (shown in the Templates tab instead), `.boardlib` import/export (phase 10, with files), and editing a template visually in place. Edit a template by detaching a copy, changing it, and saving it again under the same name, which creates the next version.
 
 **Phase 6: images (done, 2026-10-26)**
-- **Asset store (`src/assets/`):** IndexedDB `boardbot.asset.<sha1>` holding the data URL, mime type and natural size. The id is the SHA-1 of the bytes, which matches Excalidraw's file ids, so a pasted or dropped image's `fileId` is the board's `asset:<id>`.
+- **Asset store (`src/assets/`):** IndexedDB `marker.asset.<sha1>` holding the data URL, mime type and natural size. The id is the SHA-1 of the bytes, which matches Excalidraw's file ids, so a pasted or dropped image's `fileId` is the board's `asset:<id>`.
 - **Canvas:** new files are stored when the scene is read; files the board needs are loaded into Excalidraw (`addFiles`) on startup and after every render. Crop and flip made in Excalidraw round-trip as `crop` and `flip` hints.
 - **Attachments:**
   - paperclip, paste or drop onto the ledge, up to 4 images;
@@ -447,7 +447,7 @@ recording → transcribing → queued → building context → calling model →
   - The status strip shows the engine, model download progress, and recording time.
   - Settings → Shortcuts records new key combinations and warns about clashes with Excalidraw, browser and OS shortcuts.
 - **Spike C result:** Moonshine tiny on WASM (headless Chromium, no WebGPU) downloaded and loaded in about 3.1 s and transcribed a 2.7 s spoken request in **185 ms**, accurately. On-device is the right default.
-- **Testing:** Chrome's fake microphone plays `e2e/fixtures/speech.wav` (made with macOS `say`). The remote and tap/hold flows are tested with a mocked Azure; the real on-device run is opt-in with `BOARDBOT_SPEECH_E2E=1`, because it downloads the model.
+- **Testing:** Chrome's fake microphone plays `e2e/fixtures/speech.wav` (made with macOS `say`). The remote and tap/hold flows are tested with a mocked Azure; the real on-device run is opt-in with `MARKER_SPEECH_E2E=1`, because it downloads the model.
 - **Later:** Whisper's vocabulary prompt from board labels, and Chrome's on-device `processLocally` for browser speech. Vite also emits its own unused 27 MB copy of the ORT WASM file in `dist/`, to trim in phase 10.
 
 **Phase 8: job queue (done, 2026-10-26)**
@@ -457,7 +457,7 @@ recording → transcribing → queued → building context → calling model →
 - **Placement fix (requested):** requests carry the visible area. Unconnected new elements are centred in the view, at the nearest free spot (ring search), instead of right of the board or at (0,0). Images without a place or selection are centred too, and the model is told the visible bounds and centre.
 
 **Phase 9: usage and cost (done, 2026-10-26)**
-- **Ledger:** IndexedDB store `boardbot-usage/records`, one record per remote call: chat (each correction round separately), connection tests, and remote transcription. Each holds the deployment, the reported model, job id, input / cached input / output tokens, audio seconds, and the cost in USD worked out when the call was made. `meterProvider()` wraps any provider; a cancelled call records estimated tokens (request size / 4, plus what had streamed), flagged `estimated`.
+- **Ledger:** IndexedDB store `marker-usage/records`, one record per remote call: chat (each correction round separately), connection tests, and remote transcription. Each holds the deployment, the reported model, job id, input / cached input / output tokens, audio seconds, and the cost in USD worked out when the call was made. `meterProvider()` wraps any provider; a cancelled call records estimated tokens (request size / 4, plus what had streamed), flagged `estimated`.
 - **Prices:**
   - `settings.pricing[deployment]` stores $/1M input, cached input and output, plus $/minute of audio;
   - defaults cover known families (gpt-4o, 4o-mini, 4.1, 4.1-mini, 4.1-nano, 5, 5-mini, 5-nano, o4-mini, the transcribe models, whisper), matched by exact family or `family-<suffix>`. `gpt-5.6-luna` deliberately matches nothing, so it isn't costed at another model's price.
@@ -470,7 +470,7 @@ recording → transcribing → queued → building context → calling model →
   - the queue panel shows each request's cost.
 
 **Phase 9b: settings export and import (done, 2026-10-26)**
-- **Export:** `boardbot-settings.json`, shaped `{schema: 'boardbot-settings', version: 1, exportedAt, settings}`, from the dialog's current form. Keys are stored apart from settings, so they can't be included; as a second safeguard the exporter refuses if any key-like field name, or the stored key's value, would appear in the file.
+- **Export:** `marker-settings.json`, shaped `{schema: 'marker-settings', version: 1, exportedAt, settings}`, from the dialog's current form. Keys are stored apart from settings, so they can't be included; as a second safeguard the exporter refuses if any key-like field name, or the stored key's value, would appear in the file.
 - **Import:**
   - parse the file and check its schema and version, refusing newer formats;
   - run the `MIGRATIONS[n]` chain, which upgrades a file one version at a time;
@@ -497,7 +497,7 @@ recording → transcribing → queued → building context → calling model →
   - `clientsClaim()` makes the first visit work offline;
   - updates are offered as a Reload toast;
   - there's a manifest, and icons rendered from `public/icons/icon.svg` by `scripts/make-icons.mjs`.
-- **Evals (`evals/`):** 31 cases with tolerant structural checks. `npm run eval` replays `evals/recordings/*.json` (cases without one are skipped; one hand-written example is included), and `npm run eval:live` records against Azure from the `BOARDBOT_AZURE_*` env vars.
+- **Evals (`evals/`):** 31 cases with tolerant structural checks. `npm run eval` replays `evals/recordings/*.json` (cases without one are skipped; one hand-written example is included), and `npm run eval:live` records against Azure from the `MARKER_AZURE_*` env vars.
 - **Production checks:** `npm run e2e:preview` builds and runs `e2e/preview/` against `vite preview`, covering the policy (no violations), on-device speech under the policy, and opening offline.
 
 ## Verification

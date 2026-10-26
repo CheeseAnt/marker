@@ -40,8 +40,8 @@ export async function freshApp(page: Page, opts: { configured?: boolean } = {}) 
       localStorage.clear()
       indexedDB.deleteDatabase('keyval-store')
       if (configured) {
-        localStorage.setItem('boardbot.settings', JSON.stringify({ providers: { 'azure-foundry': { endpoint: 'https://res.openai.azure.com', deployment: 'gpt-5.6-luna' } } }))
-        localStorage.setItem('boardbot.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'k' } }))
+        localStorage.setItem('marker.settings', JSON.stringify({ providers: { 'azure-foundry': { endpoint: 'https://res.openai.azure.com', deployment: 'gpt-5.6-luna' } } }))
+        localStorage.setItem('marker.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'k' } }))
       }
     },
     { configured: opts.configured ?? false },
@@ -63,4 +63,4 @@ export type BoardState = {
 }
 
 export const boardState = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __boardbot: { useBoard: { getState(): unknown } } }).__boardbot.useBoard.getState()) as Promise<BoardState>
+  page.evaluate(() => (window as unknown as { __marker: { useBoard: { getState(): unknown } } }).__marker.useBoard.getState()) as Promise<BoardState>

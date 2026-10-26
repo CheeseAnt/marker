@@ -5,7 +5,7 @@ import { printBoard } from '../dsl/print'
 import type { Board } from '../model/types'
 import type { TemplateVersion } from './operations'
 
-const LIBRARY_KEY = 'boardbot.templates.v1'
+const LIBRARY_KEY = 'marker.templates.v1'
 
 /** Stored as text, the same format as boards, so a template can be read and copied by hand. */
 interface StoredVersion {

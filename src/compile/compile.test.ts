@@ -1,6 +1,7 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { parseBoard } from '../dsl/parse'
+import { printBoard } from '../dsl/print'
 import { commit } from '../model/apply'
 import { boardArb } from '../model/arbitrary'
 import type { Board } from '../model/types'
@@ -274,5 +275,48 @@ describe('images', () => {
     expect(ops).toEqual([{ op: 'update', id: 'i1', set: { hints: { crop: '10,0,200,150,300,150', flip: 'h' } } }])
     expect(byId(compileBoard(next).elements, 'i1')).toMatchObject({ crop: { x: 10, width: 200 }, scale: [-1, 1] })
     expect(again).toEqual([])
+  })
+})
+
+describe('cylinders', () => {
+  const cyl = parseBoard(`board "c" v1
+node api "API" rect at(0,0) size(160,60)
+node db "Orders" cylinder at(0,200) size(160,120) fill=#e3f2fd
+edge e1 api -> db "reads"
+group g1 [api, db]
+`)
+
+  it('round-trips through the text format', () => {
+    expect(parseBoard(printBoard(cyl))).toEqual(cyl)
+  })
+
+  it('draws an outline and a rim, grouped under the node, with arrows and label on the node', () => {
+    const scene = compileBoard(cyl).elements
+    const node = byId(scene, 'db')
+    const body = byId(scene, 'db~body')
+    const rim = byId(scene, 'db~rim')
+    expect(node).toMatchObject({ type: 'rectangle', strokeColor: 'transparent', backgroundColor: 'transparent', groupIds: ['db', 'g1'] })
+    expect(body).toMatchObject({ type: 'line', backgroundColor: '#e3f2fd', groupIds: ['db', 'g1'] })
+    expect(body.points!.at(0)).toEqual(body.points!.at(-1))
+    expect(rim).toMatchObject({ type: 'ellipse', backgroundColor: 'transparent', x: 0, y: 200, width: 160 })
+    expect(byId(scene, 'e1').endBinding?.elementId).toBe('db')
+    expect(byId(scene, 'db~label')).toMatchObject({ containerId: 'db' })
+  })
+
+  it('records a move of the whole cylinder and a recolour of its outline, and nothing else', () => {
+    const { ops, next, again } = editScene(cyl, (s) => {
+      for (const e of s) if (e.groupIds.includes('db')) e.x += 40
+      byId(s, 'db~body').backgroundColor = '#ffc9c9'
+    })
+    expect(ops).toEqual([{ op: 'update', id: 'db', set: { at: { kind: 'at', x: 40, y: 200 }, style: { fill: '#ffc9c9' } } }])
+    expect(next.elements.find((e) => e.id === 'g1')).toMatchObject({ members: ['api', 'db'] })
+    expect(again).toEqual([])
+  })
+
+  it('removes the node when its parts are deleted', () => {
+    const { ops } = editScene(cyl, (s) => {
+      for (const e of s) if (e.groupIds.includes('db')) e.isDeleted = true
+    })
+    expect(ops).toContainEqual({ op: 'remove', id: 'db' })
   })
 })

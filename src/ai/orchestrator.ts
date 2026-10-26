@@ -10,6 +10,8 @@ import { buildContext, SYSTEM_PROMPT, type Attachment } from './prompt'
 import { ProviderError, type ChatMessage, type LLMProvider, type ToolCall, type ToolDef, type Usage } from './providers/types'
 
 export const MAX_REPAIRS = 2
+export const UNDO_MOVED = "Another change landed after this request was sent, so nothing was undone. Open History to go back to the change you meant."
+
 const MAX_OUTPUT_TOKENS = 8000
 
 export const TOOLS: ToolDef[] = [
@@ -43,6 +45,11 @@ export interface EditRequest {
   getBoard: () => Board
   /** For undo_first; read together with getBoard. */
   getHistory: () => History
+  /**
+   * The ids of the newest changes when the request was sent, newest first: what the model was
+   * shown as "Recent changes". undo_first undoes these, and only while they are still the newest.
+   */
+  undoBase?: string[]
   selection: Id[]
   /** Formatted recent conversation and changes (see formatRecent). */
   recent?: string
@@ -156,11 +163,15 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
     const undoCount = parsed.data.undo_first ?? 0
     let board = req.getBoard()
     let history = req.getHistory()
-    const txIds = history.past.slice(history.past.length - undoCount).map((t) => t.id).reverse()
-    if (undoCount > history.past.length) {
-      problems([`undo_first is ${undoCount} but only ${history.past.length} change(s) can be undone`])
+    const newest = history.past.slice(history.past.length - undoCount).map((t) => t.id).reverse()
+    const undoable = req.undoBase ? req.undoBase.length : history.past.length
+    if (undoCount > undoable || undoCount > history.past.length) {
+      problems([`undo_first is ${undoCount} but only ${Math.min(undoable, history.past.length)} change(s) can be undone`])
       continue
     }
+    const txIds = req.undoBase ? req.undoBase.slice(0, undoCount) : newest
+    // Another change landed since the request was sent: undoing the newest would undo that one.
+    if (txIds.some((id, i) => id !== newest[i])) throw new ProviderError('bad-request', UNDO_MOVED)
     try {
       for (let i = 0; i < undoCount; i++) ({ board, history } = undoStep(board, history)!)
     } catch (e) {

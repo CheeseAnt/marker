@@ -13,7 +13,7 @@ function download(text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
   const a = document.createElement('a')
   a.href = url
-  a.download = 'boardbot-settings.json'
+  a.download = 'marker-settings.json'
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

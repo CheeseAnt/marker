@@ -163,3 +163,12 @@ test('follow-ups: "yes, do that" and "undo that and do it another way"', async (
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click()
   await expect.poll(ids).toEqual(['api', 'db', 'e1'])
 })
+
+test('the prompt box is written in the Code font and offers no earlier requests', async ({ page }) => {
+  await freshApp(page, { configured: true })
+  const input = page.getByRole('textbox', { name: 'Describe a change to the board' })
+  await expect(input).toHaveAttribute('autocomplete', 'off')
+  await expect(page.locator('form.ledge')).toHaveAttribute('autocomplete', 'off')
+  expect(await input.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/^"?Comic Shanns/)
+  expect(await page.evaluate(() => document.fonts.check('20px "Comic Shanns"'))).toBe(true)
+})

@@ -141,6 +141,8 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <form
       className="ledge"
+      // Requests are one-offs; the browser shouldn't offer earlier ones back.
+      autoComplete="off"
       data-busy={busy || undefined}
       data-dropping={dropping || undefined}
       onDragOver={(e) => {
@@ -185,6 +187,7 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
           ref={input}
           id="prompt-input"
           className="ledge-input"
+          autoComplete="off"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onFocus={() => setFocused(true)}

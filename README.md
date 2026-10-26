@@ -1,6 +1,6 @@
-# BoardBot
+# Marker
 
-A browser-only whiteboard with a hand-drawn look (built on Excalidraw), edited mainly by describing changes, typed or spoken, to a model you configure (Azure AI Foundry first). There is no BoardBot server: the app talks to your model straight from the browser. The design and decisions are in [docs/PLAN.md](docs/PLAN.md).
+A browser-only whiteboard with a hand-drawn look (built on Excalidraw), edited mainly by describing changes, typed or spoken, to a model you configure (Azure AI Foundry first). There is no Marker server: the app talks to your model straight from the browser. The design and decisions are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Using it
 
@@ -23,7 +23,7 @@ npm run eval:live      # record answers from Azure (see evals/eval.test.ts for t
 npm run build
 ```
 
-Opt-in tests: `BOARDBOT_SPEECH_E2E=1` runs real on-device speech recognition (downloads a 28 MB model), and `BOARDBOT_AZURE_ENDPOINT`, `_DEPLOYMENT` and `_KEY` run `e2e/live.spec.ts` against your deployment.
+Opt-in tests: `MARKER_SPEECH_E2E=1` runs real on-device speech recognition (downloads a 28 MB model), and `MARKER_AZURE_ENDPOINT`, `_DEPLOYMENT` and `_KEY` run `e2e/live.spec.ts` against your deployment.
 
 ## Hosting
 

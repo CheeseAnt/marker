@@ -10,8 +10,8 @@ text t1 "hand-drawn notes" at(480,160)
 
 const boardText = (page: Page) =>
   page.evaluate(() => {
-    const w = window as unknown as { __boardbot: { useBoard: { getState(): { board: unknown; revision: number } } } }
-    return w.__boardbot.useBoard.getState()
+    const w = window as unknown as { __marker: { useBoard: { getState(): { board: unknown; revision: number } } } }
+    return w.__marker.useBoard.getState()
   })
 
 async function applyText(page: Page, text: string) {
@@ -46,8 +46,11 @@ test('board text renders, stays stable, picks up drags, and survives reload', as
   await page.mouse.move(box.x + 210, box.y + 165)
   await page.mouse.down()
   await page.mouse.move(box.x + 260, box.y + 165, { steps: 5 })
+  // Postgres is placed below the API, so a link shows that it will follow.
+  await expect(page.locator('.follow-link')).toHaveCount(1)
   await page.mouse.move(box.x + 310, box.y + 165, { steps: 5 })
   await page.mouse.up()
+  await expect(page.locator('.follow-link')).toHaveCount(0)
   await page.waitForTimeout(800)
   const after = (await boardText(page)).board as { elements: { id: string; at?: { x: number } }[] }
   expect(after.elements.find((e) => e.id === 'api')?.at?.x).toBeCloseTo(300, 0)

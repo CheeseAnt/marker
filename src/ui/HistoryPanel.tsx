@@ -6,7 +6,7 @@ const SOURCE_LABELS: Record<ChangeSource, string> = {
   text: 'Board text',
   ai: 'Request',
   voice: 'Spoken request',
-  system: 'BoardBot',
+  system: 'Marker',
 }
 
 const time = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' })

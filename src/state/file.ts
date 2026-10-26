@@ -9,7 +9,7 @@ import { assetIds, BoardFileError, decodeBoardFile, encodeBoardText, encodeBoard
 import { useBoard } from './board'
 import { useToast } from './toast'
 
-const FILE_KEY = 'boardbot.file.v1'
+const FILE_KEY = 'marker.file.v1'
 
 /** The browser's file picker API (Chrome, Edge), where it exists. */
 type Picker = {
@@ -23,8 +23,8 @@ type Writable = FileSystemFileHandle & {
 }
 
 const FILE_TYPES = [
-  { description: 'BoardBot board', accept: { 'text/plain': ['.board'] } },
-  { description: 'BoardBot board, compressed with images', accept: { 'application/zip': ['.boardz'] } },
+  { description: 'Marker board', accept: { 'text/plain': ['.board'] } },
+  { description: 'Marker board, compressed with images', accept: { 'application/zip': ['.boardz'] } },
 ]
 
 interface StoredFile {
@@ -162,7 +162,7 @@ export async function saveBoard(opts: { as?: boolean } = {}): Promise<boolean> {
 async function pickFile(): Promise<{ file: File; handle: FileSystemFileHandle | null } | null> {
   const picker = window as unknown as Picker
   if (picker.showOpenFilePicker) {
-    const [handle] = await picker.showOpenFilePicker({ types: [{ description: 'BoardBot board', accept: { 'text/plain': ['.board'], 'application/zip': ['.boardz'] } }] })
+    const [handle] = await picker.showOpenFilePicker({ types: [{ description: 'Marker board', accept: { 'text/plain': ['.board'], 'application/zip': ['.boardz'] } }] })
     return { file: await handle.getFile(), handle }
   }
   return new Promise((resolve) => {
@@ -187,7 +187,7 @@ export async function openBoard(): Promise<void> {
     useToast.getState().show({ kind: 'done', text: `Opened ${picked.file.name}${file.history ? ', with its undo history' : ''}` })
   } catch (e) {
     if (isAbort(e)) return
-    const message = e instanceof BoardFileError ? e.message : `It isn't a board BoardBot can read (${(e as Error).message}).`
+    const message = e instanceof BoardFileError ? e.message : `It isn't a board Marker can read (${(e as Error).message}).`
     useToast.getState().show({ kind: 'error', text: `Couldn't open that file. ${message}` })
   }
 }

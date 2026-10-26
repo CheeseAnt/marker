@@ -3,22 +3,22 @@ import { boardState, freshApp, setBoardText } from './helpers'
 
 /**
  * Runs one request against a real Azure deployment. Skipped unless configured:
- *   BOARDBOT_AZURE_ENDPOINT=https://<res>.openai.azure.com BOARDBOT_AZURE_DEPLOYMENT=<name> \
- *   BOARDBOT_AZURE_KEY=<key> npx playwright test e2e/live.spec.ts
+ *   MARKER_AZURE_ENDPOINT=https://<res>.openai.azure.com MARKER_AZURE_DEPLOYMENT=<name> \
+ *   MARKER_AZURE_KEY=<key> npx playwright test e2e/live.spec.ts
  */
-const endpoint = process.env.BOARDBOT_AZURE_ENDPOINT
-const deployment = process.env.BOARDBOT_AZURE_DEPLOYMENT
-const key = process.env.BOARDBOT_AZURE_KEY
+const endpoint = process.env.MARKER_AZURE_ENDPOINT
+const deployment = process.env.MARKER_AZURE_DEPLOYMENT
+const key = process.env.MARKER_AZURE_KEY
 
-test.skip(!endpoint || !deployment || !key, 'set BOARDBOT_AZURE_ENDPOINT, _DEPLOYMENT and _KEY to run')
+test.skip(!endpoint || !deployment || !key, 'set MARKER_AZURE_ENDPOINT, _DEPLOYMENT and _KEY to run')
 test.setTimeout(120_000)
 
 test('live: a request adds a connected node', async ({ page }) => {
   await freshApp(page)
   await page.evaluate(
     ({ endpoint, deployment, key }) => {
-      localStorage.setItem('boardbot.settings', JSON.stringify({ providers: { 'azure-foundry': { endpoint, deployment } } }))
-      localStorage.setItem('boardbot.secrets', JSON.stringify({ 'azure-foundry': { apiKey: key } }))
+      localStorage.setItem('marker.settings', JSON.stringify({ providers: { 'azure-foundry': { endpoint, deployment } } }))
+      localStorage.setItem('marker.secrets', JSON.stringify({ 'azure-foundry': { apiKey: key } }))
     },
     { endpoint, deployment, key },
   )
@@ -38,5 +38,5 @@ test('live: a request adds a connected node', async ({ page }) => {
   expect(cache).toBeTruthy()
   expect(board.elements.some((e) => e.kind === 'edge' && JSON.stringify(e).includes(cache!.id))).toBe(true)
   console.log('title:', history.past.at(-1)?.title)
-  console.log(await page.evaluate(() => (window as unknown as { __boardbot: { useJobs: { getState(): { session: unknown } } } }).__boardbot.useJobs?.getState().session))
+  console.log(await page.evaluate(() => (window as unknown as { __marker: { useJobs: { getState(): { session: unknown } } } }).__marker.useJobs?.getState().session))
 })

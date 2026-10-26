@@ -47,7 +47,7 @@ export async function startRecording(): Promise<Recording> {
   const context = new AudioContext()
   await context.audioWorklet.addModule(workletUrl)
   const source = context.createMediaStreamSource(stream)
-  const node = new AudioWorkletNode(context, 'boardbot-recorder')
+  const node = new AudioWorkletNode(context, 'marker-recorder')
   const chunks: Float32Array[] = []
   let length = 0
   let level = 0

@@ -100,7 +100,7 @@ function LibraryTransfer({ hasTemplates }: { hasTemplates: boolean }) {
   const picker = useRef<HTMLInputElement>(null)
   return (
     <div className="template-transfer">
-      <button type="button" disabled={!hasTemplates} onClick={() => downloadText(exportLibrary(useLibrary.getState().entries), 'boardbot-templates.boardlib')}>
+      <button type="button" disabled={!hasTemplates} onClick={() => downloadText(exportLibrary(useLibrary.getState().entries), 'marker-templates.boardlib')}>
         Export library
       </button>
       <button type="button" onClick={() => picker.current?.click()}>

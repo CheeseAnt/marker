@@ -1,5 +1,5 @@
 /**
- * The subset of Excalidraw's element shape that BoardBot reads and writes. Kept structural
+ * The subset of Excalidraw's element shape that Marker reads and writes. Kept structural
  * (no branded types) so compile/decompile stay pure and testable without Excalidraw loaded.
  */
 export interface ExBinding {
@@ -94,6 +94,18 @@ export const LABEL_SUFFIX = '~label'
 
 export function labelId(ownerId: string): string {
   return ownerId + LABEL_SUFFIX
+}
+
+/**
+ * A cylinder node compiles to three elements grouped under its id: an invisible rectangle
+ * with the node's id (arrows and the label attach to it), the outline, and the top rim.
+ */
+export const CYLINDER_PARTS = ['~body', '~rim'] as const
+
+/** The node a cylinder part belongs to: "db~body" -> "db". */
+export function partOwner(exId: string): string | undefined {
+  const suffix = CYLINDER_PARTS.find((s) => exId.endsWith(s))
+  return suffix && exId.slice(0, -suffix.length)
 }
 
 export const ROUNDNESS = { proportional: 2, adaptive: 3 } as const

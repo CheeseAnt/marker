@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseBoard } from '../dsl/parse'
 import { commit } from '../model/apply'
-import { resolveBoxes } from '../model/geometry'
+import { followersOf, resolveBoxes } from '../model/geometry'
 import { placeUnplaced } from './layout'
 
 describe('placeUnplaced', () => {
@@ -57,5 +57,38 @@ edge e2 db -> cache
     expect(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y).toBe(true)
     // The closest free spot, not far away.
     expect(Math.hypot(at.x - 440, at.y - 270)).toBeLessThan(200)
+  })
+
+  it('spaces nodes further apart when the arrow between them has a label', async () => {
+    const label = 'reads\\nand\\nwrites\\nevery\\nminute'
+    const board = parseBoard(`board "t" v1
+node api "API" rect at(0,0) size(120,60)
+node db "Database" rect
+node cache "Cache" rect
+edge e1 api -> db "${label}"
+edge e2 db -> cache "${label}"
+`)
+    const boxes = resolveBoxes(commit(board, await placeUnplaced(board)).board)
+    const [api, db, cache] = ['api', 'db', 'cache'].map((id) => boxes.get(id)!)
+    // Five lines of text at size 20 are 125px tall; each arrow keeps some length beyond that.
+    expect(db.y - (api.y + api.h)).toBeGreaterThan(125 + 40)
+    expect(cache.y - (db.y + db.h)).toBeGreaterThan(125 + 20)
+  })
+})
+
+describe('followersOf', () => {
+  it('lists what follows a moved element, through other followers, but not what moved itself', () => {
+    const board = parseBoard(`board "t" v1
+node a "A" rect at(0,0)
+node b "B" rect below(a,60)
+node c "C" rect right(b,60)
+node d "D" rect at(400,0)
+`)
+    expect(followersOf(board, ['a'])).toEqual([
+      ['a', 'b'],
+      ['b', 'c'],
+    ])
+    expect(followersOf(board, ['a', 'b'])).toEqual([['b', 'c']])
+    expect(followersOf(board, ['d'])).toEqual([])
   })
 })

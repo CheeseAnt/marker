@@ -107,6 +107,34 @@ describe('job queue', () => {
     expect(useBoard.getState().board.elements.some((e) => e.id === 'z')).toBe(true)
   })
 
+  it('undoes only what the request was sent about, and refuses if another change landed since', async () => {
+    useBoard.getState().apply([{ op: 'update', id: 'x', set: { label: 'Ex' } }], 'manual', { title: 'Renamed x' })
+    const { submit } = useJobs.getState()
+    submit('undo that')
+    submit('rename y')
+    await tick()
+    expect(promptOf(0)).toBe('undo that')
+    // The model was shown "Renamed x" as the newest change.
+    expect(String(calls[0].req.messages[0].content)).toContain('1. Canvas edit: Renamed x')
+    calls[1].answer(edit('Renamed y', [{ op: 'update', id: 'y', label: 'Why' }]))
+    await vi.waitFor(() => expect(stages()).toEqual(['thinking', 'done']))
+    calls[0].answer({ toolCalls: [{ id: 'c', name: 'edit_board', arguments: JSON.stringify({ summary: 'Undid it', undo_first: 1, ops: [] }) }] })
+    await vi.waitFor(() => expect(stages()).toEqual(['failed', 'done']))
+    expect(useJobs.getState().jobs[0].error).toMatch(/Another change landed/)
+    // Neither change was undone.
+    expect(useBoard.getState().board.elements.map((e) => (e as { label?: string }).label)).toEqual(['Ex', 'Why'])
+    expect(useBoard.getState().history.past.map((t) => t.title)).toEqual(['Renamed x', 'Renamed y'])
+  })
+
+  it('undoes the change it was sent about when nothing else landed', async () => {
+    useBoard.getState().apply([{ op: 'update', id: 'x', set: { label: 'Ex' } }], 'manual', { title: 'Renamed x' })
+    useJobs.getState().submit('undo that')
+    await tick()
+    calls[0].answer({ toolCalls: [{ id: 'c', name: 'edit_board', arguments: JSON.stringify({ summary: 'Undid it', undo_first: 1, ops: [] }) }] })
+    await vi.waitFor(() => expect(stages()).toEqual(['done']))
+    expect(useBoard.getState().history.past).toEqual([])
+  })
+
   it('cancels waiting and running requests', async () => {
     const { submit, cancel } = useJobs.getState()
     const a = submit('a')

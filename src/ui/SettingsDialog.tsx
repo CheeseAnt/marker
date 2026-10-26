@@ -158,8 +158,8 @@ export function SettingsDialog({ open, onClose }: Props) {
         <section className="settings-section" aria-labelledby="provider-heading">
           <h3 id="provider-heading">Model</h3>
           <p className="settings-lede">
-            BoardBot sends your requests and the board's text to this model. It connects straight from your browser; there's no
-            BoardBot server in between.
+            Marker sends your requests and the board's text to this model. It connects straight from your browser; there's no
+            Marker server in between.
           </p>
 
           <div className="field">

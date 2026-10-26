@@ -5,7 +5,7 @@ const stream = (body: string) => ({ status: 200, headers: { ...CORS, 'content-ty
 
 const elements = (page: Page) =>
   page.evaluate(
-    () => (window as unknown as { __boardbot: { useBoard: { getState(): { board: { elements: unknown[] } } } } }).__boardbot.useBoard.getState().board.elements,
+    () => (window as unknown as { __marker: { useBoard: { getState(): { board: { elements: unknown[] } } } } }).__marker.useBoard.getState().board.elements,
   ) as Promise<{ id: string; at?: { x: number; y: number } }[]>
 
 test('two requests run at once, the panel shows them, and unconnected results land mid-view', async ({ page }) => {

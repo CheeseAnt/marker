@@ -1,5 +1,5 @@
 /*
- * BoardBot chrome. The canvas is the hero; the only bold element is the marker ledge,
+ * Marker chrome. The canvas is the hero; the only bold element is the marker ledge,
  * where requests are written in the board's own handwriting.
  */
 :root {
@@ -16,7 +16,9 @@
   --font-ui: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
   /* Registered by Excalidraw from the self-hosted fonts in public/fonts. */
   --font-hand: 'Excalifont', 'Comic Shanns', 'Comic Sans MS', cursive;
-  --font-code: 'BoardBot Code', 'Cascadia Code', ui-monospace, monospace;
+  --font-code: 'Marker Code', 'Cascadia Code', ui-monospace, monospace;
+  /* The board's "Code" font preset, also registered by Excalidraw. */
+  --font-code-informal: 'Comic Shanns', 'Marker Code', ui-monospace, monospace;
 
   --step--1: 0.8125rem;
   --step-0: 0.9375rem;
@@ -31,7 +33,7 @@
 
 /* Its own name: Excalidraw registers "Cascadia" itself, and two faces with one name confuse loading. */
 @font-face {
-  font-family: 'BoardBot Code';
+  font-family: 'Marker Code';
   src: url('/fonts/Cascadia/CascadiaCode-Regular.woff2') format('woff2');
   font-display: swap;
 }
@@ -74,6 +76,33 @@ button {
 .canvas-host {
   position: absolute;
   inset: 0;
+}
+
+/* Drawn over the canvas in scene positions; only its controls take the pointer. */
+.canvas-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* While an element is dragged: what is placed relative to it, and will follow it. */
+.follow-links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.follow-link line,
+.follow-link rect {
+  fill: none;
+  stroke: var(--marker-blue);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  stroke-linecap: round;
+  opacity: 0.55;
 }
 
 /* Changes from a request get a passing stroke of blue marker. */
@@ -121,7 +150,7 @@ button {
   }
 }
 
-/* History is owned by BoardBot, not Excalidraw (plan §2). */
+/* History is owned by Marker, not Excalidraw (plan §2). */
 .canvas .undo-redo-buttons {
   display: none;
 }
@@ -246,7 +275,7 @@ button {
 .ledge-input {
   flex: 1;
   min-width: 0;
-  font-family: var(--font-hand);
+  font-family: var(--font-code-informal);
   font-size: var(--step-1);
   line-height: 1.3;
   color: var(--ink);

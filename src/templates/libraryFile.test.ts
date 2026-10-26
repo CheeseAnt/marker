@@ -9,6 +9,8 @@ describe('template library files', () => {
     useLibrary.setState({ entries: { server: { name: 'server', versions: [{ version: 1, text: server('A'), savedAt: 1 }] } } })
     const text = exportLibrary(useLibrary.getState().entries)
     expect(parseLibraryFile(text)).toEqual([{ name: 'server', version: 1, text: server('A') }])
+    // Libraries exported before the rename still import.
+    expect(parseLibraryFile(text.replace('"marker-library"', '"boardbot-library"'))).toHaveLength(1)
 
     // Same version: skipped. Different content under a taken version number: added as the next.
     const added = useLibrary.getState().importVersions([
@@ -22,9 +24,9 @@ describe('template library files', () => {
 
   it.each([
     ['nope', /isn't valid JSON/],
-    ['{"schema":"boardbot-settings"}', /isn't a BoardBot template library/],
-    ['{"schema":"boardbot-library","version":9,"templates":[]}', /newer version/],
-    ['{"schema":"boardbot-library","version":1,"templates":[{"name":"x","versions":[{"version":1,"text":"board \\"X\\" v1\\n"}]}]}', /isn't a template named x/],
+    ['{"schema":"marker-settings"}', /isn't a Marker template library/],
+    ['{"schema":"marker-library","version":9,"templates":[]}', /newer version/],
+    ['{"schema":"marker-library","version":1,"templates":[{"name":"x","versions":[{"version":1,"text":"board \\"X\\" v1\\n"}]}]}', /isn't a template named x/],
   ])('rejects %s', (text, message) => {
     expect(() => parseLibraryFile(text)).toThrow(message)
   })

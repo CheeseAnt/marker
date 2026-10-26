@@ -34,8 +34,8 @@ test('board font menu sets the default; elements keep their own fonts', async ({
 
   // Nodes without their own font follow the board; the others keep theirs.
   const families = await page.evaluate(() => {
-    const w = window as unknown as { __boardbot: { useBoard: { getState(): { compiled: { elements: { id: string; fontFamily?: number }[] } } } } }
-    return Object.fromEntries(w.__boardbot.useBoard.getState().compiled.elements.filter((e) => e.fontFamily).map((e) => [e.id, e.fontFamily]))
+    const w = window as unknown as { __marker: { useBoard: { getState(): { compiled: { elements: { id: string; fontFamily?: number }[] } } } } }
+    return Object.fromEntries(w.__marker.useBoard.getState().compiled.elements.filter((e) => e.fontFamily).map((e) => [e.id, e.fontFamily]))
   })
   expect(families).toEqual({ 'title~label': 7, 'api~label': 6, 'db~label': 6, 'e1~label': 6, t1: 3, t2: 9, t3: 1 })
 

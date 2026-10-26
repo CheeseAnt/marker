@@ -25,10 +25,20 @@ export function measureText(text: string, fontSize: number, font?: FontId): Size
   return { w: Math.ceil(longest * fontSize * fontPreset(font).charWidth), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
 }
 
+/** Estimated size of an edge's label, if it has one. */
+export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefined {
+  if (edge.kind !== 'edge' || !edge.label) return undefined
+  const style = effectiveStyle(board, edge)
+  return measureText(edge.label, style.fontSize ?? DEFAULT_FONT_SIZE, style.font)
+}
+
+/** Room to leave around a label on an arrow, so some of the arrow still shows either side. */
+export const LABEL_MARGIN = 40
+
 export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
   const text = measureText(node.label || ' ', fontSize, font)
-  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70] }[node.shape]
-  const min = node.shape === 'sticky' ? { w: 160, h: 160 } : { w: 120, h: 60 }
+  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape]
+  const min = node.shape === 'sticky' ? { w: 160, h: 160 } : node.shape === 'cylinder' ? { w: 120, h: 90 } : { w: 120, h: 60 }
   return {
     w: Math.max(min.w, Math.min(480, text.w + pad[0])),
     h: Math.max(min.h, text.h + pad[1]),
@@ -81,6 +91,27 @@ function isAnchor(el: BoardElement): boolean {
 
 function placementOf(el: BoardElement): Placement | undefined {
   return el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance' ? el.at : undefined
+}
+
+/**
+ * Elements that follow `moved` because they are placed relative to it, directly or through
+ * another follower, as [anchor, follower] pairs. Elements in `moved` themselves are left out.
+ */
+export function followersOf(board: Board, moved: Iterable<Id>): [Id, Id][] {
+  const movedSet = new Set(moved)
+  const reached = new Set(movedSet)
+  const pairs: [Id, Id][] = []
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const el of board.elements) {
+      const p = placementOf(el)
+      if (p?.kind !== 'rel' || !reached.has(p.of) || reached.has(el.id)) continue
+      reached.add(el.id)
+      pairs.push([p.of, el.id])
+      grew = true
+    }
+  }
+  return pairs
 }
 
 function relativeBox(of: Box, size: Size, p: Extract<Placement, { kind: 'rel' }>): Box {

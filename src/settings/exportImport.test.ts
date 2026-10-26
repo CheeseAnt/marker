@@ -20,7 +20,7 @@ describe('settings export', () => {
   it('writes a versioned file without API keys', () => {
     const text = exportSettings(base, secrets, new Date('2026-10-26T12:00:00Z'))
     const file = JSON.parse(text)
-    expect(file).toMatchObject({ schema: 'boardbot-settings', version: 1, exportedAt: '2026-10-26T12:00:00.000Z' })
+    expect(file).toMatchObject({ schema: 'marker-settings', version: 1, exportedAt: '2026-10-26T12:00:00.000Z' })
     expect(file.settings.providers['azure-foundry'].deployment).toBe('gpt-5.6-luna')
     expect(text).not.toContain('super-secret-key-123')
     expect(text).not.toMatch(/apiKey/i)
@@ -39,25 +39,29 @@ describe('settings import', () => {
     expect(parseSettingsFile(file)).toEqual(base)
   })
 
+  it('reads files exported under the old name', () => {
+    expect(parseSettingsFile(file.replace('"marker-settings"', '"boardbot-settings"'))).toEqual(base)
+  })
+
   it.each([
     ['not json', /isn't valid JSON/],
-    ['{"schema":"other","version":1,"settings":{}}', /isn't a BoardBot settings file/],
-    ['{"schema":"boardbot-settings","version":9,"settings":{}}', /newer version of BoardBot \(format 9\)/],
-    ['{"schema":"boardbot-settings","version":1,"settings":{"voice":{"mode":"shout"}}}', /invalid value at voice\.mode/],
-    ['{"schema":"boardbot-settings","version":1,"settings":{"providers":{"azure-foundry":{"apiKey":"x"}}}}', /contains providers\.azure-foundry\.apiKey/],
-    ['{"schema":"boardbot-settings","version":0,"settings":{}}', /from version 0 can't be read/],
+    ['{"schema":"other","version":1,"settings":{}}', /isn't a Marker settings file/],
+    ['{"schema":"marker-settings","version":9,"settings":{}}', /newer version of Marker \(format 9\)/],
+    ['{"schema":"marker-settings","version":1,"settings":{"voice":{"mode":"shout"}}}', /invalid value at voice\.mode/],
+    ['{"schema":"marker-settings","version":1,"settings":{"providers":{"azure-foundry":{"apiKey":"x"}}}}', /contains providers\.azure-foundry\.apiKey/],
+    ['{"schema":"marker-settings","version":0,"settings":{}}', /from version 0 can't be read/],
   ])('rejects %s', (text, message) => {
     expect(() => parseSettingsFile(text)).toThrow(message)
   })
 
   it('upgrades older files through each migration in turn', () => {
     const migrations: Record<number, Migration> = { 0: (raw) => ({ ...raw, jobConcurrency: (raw.parallel as number) ?? 2 }) }
-    const old = JSON.stringify({ schema: 'boardbot-settings', version: 0, settings: { parallel: 3 } })
+    const old = JSON.stringify({ schema: 'marker-settings', version: 0, settings: { parallel: 3 } })
     expect(parseSettingsFile(old, migrations).jobConcurrency).toBe(3)
   })
 
   it('replaces everything, or only what the file sets', () => {
-    const partial = JSON.stringify({ schema: 'boardbot-settings', version: 1, settings: { voice: { mode: 'off' }, pricing: { 'gpt-4o': { input: 2 } } } })
+    const partial = JSON.stringify({ schema: 'marker-settings', version: 1, settings: { voice: { mode: 'off' }, pricing: { 'gpt-4o': { input: 2 } } } })
     const incoming = parseSettingsFile(partial)
     const replaced = combineSettings(base, incoming, rawSettingsOf(partial), 'replace')
     expect(replaced.providers['azure-foundry'].endpoint).toBe('')

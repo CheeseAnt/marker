@@ -7,6 +7,7 @@ import type { Op } from '../model/ops'
 import { pointsToPath } from '../model/path'
 import {
   idSchema,
+  shapes,
   type Board,
   type BoardElement,
   type EdgeElement,
@@ -18,7 +19,7 @@ import {
   type Point,
 } from '../model/types'
 import { DEFAULT_FONT, fontForFamily, fontPreset } from '../model/fonts'
-import { cropToHint, FILL_STYLE, flipToHint, LABEL_SUFFIX, type ExElement } from './exTypes'
+import { CYLINDER_PARTS, cropToHint, FILL_STYLE, flipToHint, LABEL_SUFFIX, partOwner, type ExElement } from './exTypes'
 import { compileBoard, type Compiled } from './toExcalidraw'
 
 const EPS = 0.5
@@ -123,7 +124,7 @@ type CopyChange = { kind: 'none' } | { kind: 'update'; set: Patch } | { kind: 'r
 /** The child path of a compiled id inside its copy: "web1/b~label" -> "b". */
 function childPath(instanceId: Id, compiledId: string): string {
   const path = compiledId.slice(instanceId.length + 1)
-  return path.endsWith(LABEL_SUFFIX) ? path.slice(0, -LABEL_SUFFIX.length) : path
+  return path.endsWith(LABEL_SUFFIX) ? path.slice(0, -LABEL_SUFFIX.length) : (partOwner(path) ?? path)
 }
 
 function boundsOf(els: ExElement[]) {
@@ -245,7 +246,9 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
   for (const e of live) if (e.type === 'text' && e.containerId) labelOf.set(e.containerId, e)
 
   const endpointOf = (binding: ExElement['startBinding'], fallback: Point | undefined): Endpoint | undefined => {
-    const target = binding && liveById.get(binding.elementId)
+    // An arrow attached to part of a cylinder attaches to the cylinder.
+    const boundId = binding && (partOwner(binding.elementId) ?? binding.elementId)
+    const target = boundId && liveById.get(boundId)
     if (target && isRendered(target)) {
       // A part of a template copy: attach to the port on that part, or to the copy itself.
       const owner = ownerInstance(target.id)
@@ -289,14 +292,20 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
     switch (el.kind) {
       case 'node': {
         const shape = shapeOf(ex, el)
-        if (shape !== el.shape && ['rect', 'ellipse', 'diamond', 'sticky'].includes(shape)) set.shape = shape
+        // A cylinder's own element is a rectangle, but that doesn't make it one.
+        if (shape !== el.shape && el.shape !== 'cylinder' && shapes.includes(shape)) set.shape = shape
         const resized = !near(ex.width, c.width) || !near(ex.height, c.height)
         if (resized) set.size = { w: r2(ex.width), h: r2(ex.height) }
         // Relative placement is centred on the anchor, so a resize must pin the node or it would jump.
         if (!near(ex.x, c.x) || !near(ex.y, c.y) || (resized && el.at?.kind !== 'at')) {
           set.at = { kind: 'at', x: r2(ex.x), y: r2(ex.y) }
         }
-        styleHintDiff(ex, c, style, hints)
+        if (el.shape === 'cylinder') {
+          // The outline shows the cylinder's style; its own rectangle is invisible.
+          const [body, compiledBody] = [liveById.get(el.id + CYLINDER_PARTS[0]), compiledById.get(el.id + CYLINDER_PARTS[0])]
+          if (body && compiledBody) styleHintDiff(body, compiledBody, style, hints)
+          if (ex.seed !== c.seed) hints.seed = ex.seed
+        } else styleHintDiff(ex, c, style, hints)
         const label = labelOf.get(el.id)
         if ((label?.text ?? '') !== el.label) set.label = label?.text ?? ''
         if (label) fontDiff(label, compiledById.get(el.id + LABEL_SUFFIX) ?? defaultFont(board, el), style, hints)
@@ -345,7 +354,7 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
 
   // Elements drawn by hand. Their style is whatever differs from a freshly compiled default.
   for (const ex of live) {
-    if (boardById.has(ex.id) || !isRendered(ex) || ownerInstance(ex.id)) continue
+    if (boardById.has(ex.id) || !isRendered(ex) || ownerInstance(ex.id) || isCylinderPart(ex.id, boardById)) continue
     if (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId)) continue
     const element = newElement(ex, toBoardId(ex.id), labelOf.get(ex.id), endpointOf)
     if (!element) continue
@@ -401,6 +410,12 @@ function edgeChanges(
   const { head } = headOf(ex)
   if (head !== el.head) set.head = head
   return set
+}
+
+function isCylinderPart(exId: string, boardById: Map<Id, BoardElement>): boolean {
+  const owner = partOwner(exId)
+  const el = owner ? boardById.get(owner) : undefined
+  return el?.kind === 'node' && el.shape === 'cylinder'
 }
 
 const RENDERED = new Set(['rectangle', 'ellipse', 'diamond', 'text', 'arrow', 'line', 'freedraw', 'image'])
@@ -466,10 +481,13 @@ function diffGroups(
   }
   for (const ex of live) {
     if (!isRendered(ex) || (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId))) continue
+    // A cylinder's parts are grouped under its own id; the cylinder itself stands for them.
+    if (isCylinderPart(ex.id, new Map(board.elements.map((e) => [e.id, e])))) continue
     // A copy's parts stand for the copy: only groups outside it (after its own id) count.
     const owner = ownerInstance(ex.id)
     const member = owner ? owner.instance : toBoardId(ex.id)
-    const groupIds = owner ? ex.groupIds.slice(ex.groupIds.indexOf(owner.instance) + 1) : ex.groupIds
+    const own = owner ? ex.groupIds.slice(ex.groupIds.indexOf(owner.instance) + 1) : ex.groupIds
+    const groupIds = own[0] === ex.id ? own.slice(1) : own
     if (owner && !ex.groupIds.includes(owner.instance)) continue
     const chain = groupIds.map(toBoardId)
     if (chain.length) addMember(chain[0], member)
@@ -502,7 +520,7 @@ function diffOrder(board: Board, live: ExElement[], toBoardId: (exId: string) =>
   const present = new Set(board.elements.filter((e) => e.kind !== 'group').map((e) => e.id))
   const desired: Id[] = []
   for (const ex of live) {
-    if (ex.id.endsWith(LABEL_SUFFIX) || (ex.type === 'text' && ex.containerId)) continue
+    if (ex.id.endsWith(LABEL_SUFFIX) || (ex.type === 'text' && ex.containerId) || partOwner(ex.id)) continue
     const owner = ownerInstance(ex.id)
     const id = owner ? owner.instance : (idFor.get(ex.id) ?? (isRendered(ex) ? toBoardId(ex.id) : undefined))
     if (id && present.has(id) && !desired.includes(id)) desired.push(id)

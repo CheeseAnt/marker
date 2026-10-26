@@ -7,6 +7,7 @@ import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, InstanceEle
 import {
   BIND_GAP,
   cropFromHint,
+  CYLINDER_PARTS,
   DEFAULT_FILL,
   DEFAULT_STROKE,
   FILL_STYLE,
@@ -118,7 +119,49 @@ export function boundaryPoint(box: Box, outline: Outline, toward: Point, gap: nu
 
 function outlineOf(el: BoardElement | undefined): Outline {
   if (el?.kind !== 'node') return 'rect'
-  return el.shape === 'sticky' ? 'rect' : el.shape
+  return el.shape === 'sticky' || el.shape === 'cylinder' ? 'rect' : el.shape
+}
+
+/** Height of a cylinder's top (and bottom) ellipse. */
+export function cylinderRim(box: Box): number {
+  return Math.round(Math.max(8, Math.min(box.h / 6, box.w / 4)))
+}
+
+/** Points of a half ellipse across the width of `box` at height `cy`, left to right. */
+function halfEllipse(box: Box, cy: number, ry: number, below: boolean): [number, number][] {
+  const steps = 10
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const t = Math.PI * (1 - i / steps)
+    return [box.w / 2 + (box.w / 2) * Math.cos(t), cy + (below ? 1 : -1) * ry * Math.sin(t)]
+  })
+}
+
+/** The cylinder's outline and rim, grouped with its (invisible) main rectangle. */
+function cylinderParts(el: BoardElement, box: Box, style: Style, groupIds: string[]): ExElement[] {
+  const ry = cylinderRim(box)
+  const top = ry
+  const bottom = box.h - ry
+  // Down the left side, along the front of the bottom, up the right side, back along the top.
+  const outline = [
+    ...halfEllipse(box, bottom, ry, true),
+    ...halfEllipse(box, top, ry, false).reverse(),
+  ]
+  outline.push(outline[0])
+  const [bodyId, rimId] = CYLINDER_PARTS.map((suffix) => el.id + suffix)
+  const body: ExElement = {
+    ...base({ ...el, id: bodyId, hints: { ...el.hints, seed: hintNum(el.hints, 'seed') ?? seedFor(bodyId) } }, 'line', box, style, groupIds),
+    points: outline.map(([x, y]) => [x, y] as const),
+    lastCommittedPoint: null,
+    startBinding: null,
+    endBinding: null,
+    startArrowhead: null,
+    endArrowhead: null,
+  }
+  const rim: ExElement = {
+    ...base({ ...el, id: rimId, hints: { ...el.hints, seed: seedFor(rimId) } }, 'ellipse', { x: box.x, y: box.y, w: box.w, h: ry * 2 }, style, groupIds),
+    backgroundColor: DEFAULT_FILL,
+  }
+  return [body, rim]
 }
 
 export interface Compiled {
@@ -223,6 +266,19 @@ export function compileBoard(board: Board, depth = 0): Compiled {
     switch (el.kind) {
       case 'node': {
         if (!box) break
+        if (el.shape === 'cylinder') {
+          // The node's own element only carries bindings and the label; the parts draw it.
+          const group = [el.id, ...groupIds]
+          out.push({ ...base(el, 'rectangle', box, { ...style, stroke: DEFAULT_FILL, fill: DEFAULT_FILL }, group), roundness: null })
+          out.push(...cylinderParts(el, box, style, group))
+          if (el.label) {
+            const ry = cylinderRim(box)
+            const middle = { x: box.x + box.w / 2, y: box.y + ry + (box.h - ry) / 2 }
+            out.push(textElement(labelId(el.id), el.label, box, style, el.hints, group, { id: el.id, center: middle }, el))
+            bind(el.id, { id: labelId(el.id), type: 'text' })
+          }
+          break
+        }
         const sticky = el.shape === 'sticky'
         const type = sticky ? 'rectangle' : el.shape === 'rect' ? 'rectangle' : el.shape
         const shapeStyle = sticky ? { fill: STICKY_FILL, ...style } : style
