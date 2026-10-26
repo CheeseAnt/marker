@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { DEFAULT_API_VERSION, parseEndpoint, type EndpointStyle } from '../ai/providers/azureEndpoint'
-import { createProvider, PROVIDER_LABELS } from '../ai/providers'
+import { createProvider } from '../ai/providers'
 import { ProviderError, type ConnectionReport } from '../ai/providers/types'
 import type { Settings } from '../settings/schema'
 import { useSettings } from '../settings/store'
 import { VoiceSettings } from './VoiceSettings'
+import { ImportReview, SettingsTransferButtons, type PendingImport } from './SettingsTransfer'
 import { CostSettings } from './CostSettings'
 import { meterProvider } from '../usage/meter'
 
@@ -38,6 +39,10 @@ export function SettingsDialog({ open, onClose }: Props) {
   const [shortcuts, setShortcuts] = useState(saved.shortcuts)
   const [pricing, setPricing] = useState(saved.pricing)
   const [budget, setBudget] = useState(saved.budget)
+  // Settings without their own controls (e.g. requests at once) come from here, so imports keep them.
+  const [base, setBase] = useState(saved)
+  const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
+  const [transfer, setTransfer] = useState<{ kind: 'ok' | 'error'; message: string } | null>(null)
   const [apiKey, setApiKey] = useState(savedKey)
   const [showKey, setShowKey] = useState(false)
   const [test, setTest] = useState<TestState>({ kind: 'idle' })
@@ -54,6 +59,9 @@ export function SettingsDialog({ open, onClose }: Props) {
       setShortcuts(useSettings.getState().settings.shortcuts)
       setPricing(useSettings.getState().settings.pricing)
       setBudget(useSettings.getState().settings.budget)
+      setBase(useSettings.getState().settings)
+      setPendingImport(null)
+      setTransfer(null)
       setApiKey(useSettings.getState().secrets['azure-foundry']?.apiKey ?? '')
       setShowKey(false)
       setTest({ kind: 'idle' })
@@ -83,7 +91,20 @@ export function SettingsDialog({ open, onClose }: Props) {
     }))
   }
 
-  const draftSettings = (): Settings => ({ ...saved, voice, shortcuts, pricing, budget, providers: { ...saved.providers, 'azure-foundry': azure } })
+  const draftSettings = (): Settings => ({ ...base, voice, shortcuts, pricing, budget, providers: { ...base.providers, 'azure-foundry': azure } })
+
+  /** Puts imported settings into the form; nothing is kept until Save. */
+  const applyImported = (next: Settings) => {
+    setBase(next)
+    setAzure(next.providers['azure-foundry'])
+    setVoice(next.voice)
+    setShortcuts(next.shortcuts)
+    setPricing(next.pricing)
+    setBudget(next.budget)
+    setPendingImport(null)
+    setTest({ kind: 'idle' })
+    setTransfer({ kind: 'ok', message: 'Imported into the form. Check it, then press Save to keep it.' })
+  }
 
   const runTest = async () => {
     abort.current?.abort()
@@ -124,6 +145,15 @@ export function SettingsDialog({ open, onClose }: Props) {
         <header className="settings-header">
           <h2 id="settings-title">Settings</h2>
         </header>
+
+        {pendingImport && (
+          <ImportReview pending={pendingImport} current={draftSettings()} onApply={applyImported} onCancel={() => setPendingImport(null)} />
+        )}
+        {transfer && (
+          <p className={`settings-transfer-result ${transfer.kind}`} role={transfer.kind === 'error' ? 'alert' : 'status'}>
+            {transfer.message}
+          </p>
+        )}
 
         <section className="settings-section" aria-labelledby="provider-heading">
           <h3 id="provider-heading">Model</h3>
@@ -252,7 +282,16 @@ export function SettingsDialog({ open, onClose }: Props) {
         />
 
         <footer className="settings-footer">
-          <span className="settings-provider-note">Provider: {PROVIDER_LABELS[saved.activeProvider]}</span>
+          <SettingsTransferButtons
+            draft={draftSettings}
+            onPicked={(p) => {
+              setTransfer(null)
+              setPendingImport(p)
+              ref.current?.querySelector('form')?.scrollTo({ top: 0 })
+            }}
+            onError={(message) => setTransfer({ kind: 'error', message })}
+          />
+          <span className="spacer" />
           <button type="button" className="quiet" onClick={onClose}>
             Cancel
           </button>

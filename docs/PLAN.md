@@ -469,6 +469,16 @@ recording → transcribing → queued → building context → calling model →
   - Settings → Costs edits prices per deployment (the chat and transcription deployments, plus anything in the ledger) and the budget;
   - the queue panel shows each request's cost.
 
+**Phase 9b: settings export and import (done, 2026-10-26)**
+- **Export:** `boardbot-settings.json`, shaped `{schema: 'boardbot-settings', version: 1, exportedAt, settings}`, from the dialog's current form. Keys are stored apart from settings, so they can't be included; as a second safeguard the exporter refuses if any key-like field name, or the stored key's value, would appear in the file.
+- **Import:**
+  - parse the file and check its schema and version, refusing newer formats;
+  - run the `MIGRATIONS[n]` chain, which upgrades a file one version at a time;
+  - refuse key-like fields, then validate with zod; every error is a plain sentence.
+  - The review lists each change ("Voice: on-device → remote", "Prices for …"), with **Replace all** (the file's settings, plus defaults) or **Only change what the file sets** (a deep merge; prices for other deployments are kept).
+  - "Use these settings" fills the form, and Save keeps it. The stored key is never touched, and a fresh app shows "needs an API key".
+- **Not included:** the usage ledger (it has CSV export), template library and boards (files in phase 10).
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

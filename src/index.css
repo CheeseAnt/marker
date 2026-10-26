@@ -912,10 +912,65 @@ button {
   background: var(--board);
 }
 
-.settings-provider-note {
+.settings-footer .spacer {
   flex: 1;
+}
+
+.settings-transfer {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.settings-transfer button {
+  font-size: var(--step--1) !important;
+}
+
+.settings-transfer-result {
+  margin: 0 1.25rem 0.5rem;
+  padding: 0.5rem 0.75rem;
   font-size: var(--step--1);
+  border-radius: 4px;
+  background: var(--board);
+}
+
+.settings-transfer-result.ok {
+  color: var(--marker-green);
+}
+
+.settings-transfer-result.error {
+  color: var(--marker-red);
+}
+
+.import-review {
+  margin: 0 1.25rem 0.5rem;
+  padding: 0.75rem 1rem !important;
+  border: 1px solid var(--marker-blue) !important;
+  border-radius: 4px;
+  background: #f4f7fd;
+}
+
+.import-changes {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  font-size: var(--step--1);
+}
+
+.import-label {
+  font-weight: 700;
+}
+
+.import-from {
   color: var(--ink-soft);
+  text-decoration: line-through;
+}
+
+.import-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 /* ---- Drawer ------------------------------------------------------------- */
