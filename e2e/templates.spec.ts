@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import { freshApp, setBoardText } from './helpers'
 
@@ -76,5 +77,11 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   await expect(page.locator('.template-name')).toHaveText('Web server web_server, version 1')
   await page.getByRole('button', { name: 'Board text' }).click()
   await expect(page.getByRole('textbox', { name: 'Board text' })).toHaveValue(/use web_server2 web_server@1 at\(.*\n[\s\S]*define web_server@1 \{\n {2}board "Web server" v1\n {2}template web_server\n {2}param name "Web"\n {2}port in box center/)
+  // The library exports to a file that lists every version.
+  await page.getByRole('button', { name: 'Templates' }).click()
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export library' }).click()
+  const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'))
+  expect(exported).toMatchObject({ schema: 'boardbot-library', templates: [{ name: 'web_server', versions: [{ version: 1 }] }] })
   expect(errors).toEqual([])
 })

@@ -1151,6 +1151,26 @@ button {
   color: var(--marker-red);
 }
 
+.template-transfer {
+  display: flex;
+  gap: 0.375rem;
+  padding: 0.75rem;
+}
+
+.template-transfer button {
+  padding: 0.1875rem 0.625rem;
+  border-radius: 3px;
+  border: 1px solid var(--frame);
+  background: #fff;
+  font-size: var(--step--1);
+  cursor: pointer;
+}
+
+.template-transfer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .template-foreign {
   padding: 0.75rem;
 }

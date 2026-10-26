@@ -29,6 +29,8 @@ interface LibraryState {
    */
   save: (template: Board, version?: number) => TemplateVersion
   remove: (name: string) => void
+  /** Adds templates from a library file; returns how many versions were new. */
+  importVersions: (templates: { name: string; version: number; text: string }[]) => number
 }
 
 const parsed = new Map<string, Board>()
@@ -54,9 +56,9 @@ export function versionOf(entry: LibraryEntry, version: number): TemplateVersion
 
 export const useLibrary = create<LibraryState>((setState, getState) => {
   const persist = () => {
-    set(LIBRARY_KEY, getState().entries).catch(() => {
-      // The library still works for this session; it just won't survive a reload.
-    })
+    // Without storage the library still works for this session; it just won't survive a reload.
+    if (typeof indexedDB === 'undefined') return
+    set(LIBRARY_KEY, getState().entries).catch(() => undefined)
   }
   return {
     entries: {},
@@ -82,6 +84,17 @@ export const useLibrary = create<LibraryState>((setState, getState) => {
       setState({ entries: { ...getState().entries, [name]: next } })
       persist()
       return { name, version, board: boardOf(stored) }
+    },
+    importVersions: (templates) => {
+      let added = 0
+      for (const t of templates) {
+        const entry = getState().entries[t.name]
+        // The same version with the same content is already here.
+        if (entry?.versions.some((v) => v.version === t.version && v.text === t.text)) continue
+        getState().save(boardOf({ version: t.version, text: t.text, savedAt: 0 }), t.version)
+        added++
+      }
+      return added
     },
     remove: (name) => {
       const entries = { ...getState().entries }

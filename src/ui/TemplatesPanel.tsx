@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { parseTemplateKey, templateKey, type Board, type InstanceElement } from '../model/types'
 import { useBoard } from '../state/board'
 import { canvasSelection, highlightAfterRender, viewportCenter } from '../state/canvasBridge'
@@ -6,6 +6,7 @@ import { useToast } from '../state/toast'
 import { latestVersion, useLibrary, type LibraryEntry } from '../templates/library'
 import { collectDefinitions, insertCopyOps, updateCopiesOps, type TemplateVersion } from '../templates/operations'
 import { TemplatePreview } from './TemplatePreview'
+import { exportLibrary, LibraryFileError, parseLibraryFile } from '../templates/libraryFile'
 
 function list(names: string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '')
@@ -85,6 +86,50 @@ function Entry({ entry, copies }: { entry: LibraryEntry; copies: InstanceElement
   )
 }
 
+function downloadText(text: string, name: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Export the whole library to a file, or bring templates in from one. */
+function LibraryTransfer({ hasTemplates }: { hasTemplates: boolean }) {
+  const picker = useRef<HTMLInputElement>(null)
+  return (
+    <div className="template-transfer">
+      <button type="button" disabled={!hasTemplates} onClick={() => downloadText(exportLibrary(useLibrary.getState().entries), 'boardbot-templates.boardlib')}>
+        Export library
+      </button>
+      <button type="button" onClick={() => picker.current?.click()}>
+        Import templates…
+      </button>
+      <input
+        ref={picker}
+        type="file"
+        accept=".boardlib,application/json"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (!file) return
+          try {
+            const added = useLibrary.getState().importVersions(parseLibraryFile(await file.text()))
+            useToast.getState().show({
+              kind: 'done',
+              text: added ? `Added ${added === 1 ? 'one template version' : `${added} template versions`} from ${file.name}.` : `Your library already has everything in ${file.name}.`,
+            })
+          } catch (err) {
+            useToast.getState().show({ kind: 'error', text: err instanceof LibraryFileError ? err.message : `Couldn't read ${file.name}.` })
+          }
+        }}
+      />
+    </div>
+  )
+}
+
 /** The template library, plus templates this board uses that the library doesn't have. */
 export function TemplatesPanel({ onSaveSelection }: { onSaveSelection: () => void }) {
   const entries = useLibrary((s) => s.entries)
@@ -118,6 +163,7 @@ export function TemplatesPanel({ onSaveSelection }: { onSaveSelection: () => voi
             ))}
           </ul>
         )}
+        <LibraryTransfer hasTemplates={names.length > 0} />
         {foreign.length > 0 && (
           <section className="template-foreign" aria-labelledby="foreign-heading">
             <h3 id="foreign-heading">Used on this board, not in your library</h3>
