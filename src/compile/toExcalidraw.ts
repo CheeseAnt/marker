@@ -6,6 +6,7 @@ import { parsePath } from '../model/path'
 import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, InstanceElement, Point, Style } from '../model/types'
 import {
   BIND_GAP,
+  cropFromHint,
   DEFAULT_FILL,
   DEFAULT_STROKE,
   FILL_STYLE,
@@ -243,7 +244,16 @@ export function compileBoard(board: Board, depth = 0): Compiled {
         if (box) out.push(textElement(el.id, el.text, box, style, el.hints, groupIds, null, el))
         break
       case 'image':
-        if (box) out.push({ ...base(el, 'image', box, style, groupIds), fileId: el.asset, status: 'saved', scale: [1, 1], crop: null })
+        if (box) {
+          const flip = typeof el.hints.flip === 'string' ? el.hints.flip : ''
+          out.push({
+            ...base(el, 'image', box, style, groupIds),
+            fileId: el.asset,
+            status: 'saved',
+            scale: [flip.includes('h') ? -1 : 1, flip.includes('v') ? -1 : 1],
+            crop: cropFromHint(el.hints.crop),
+          })
+        }
         break
       case 'draw': {
         const pts = parsePath(el.path).points

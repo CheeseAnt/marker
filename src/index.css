@@ -175,6 +175,67 @@ button {
   }
 }
 
+.ledge {
+  flex-wrap: wrap;
+}
+
+.ledge[data-dropping] .ledge-input {
+  outline: 2px dashed var(--marker-blue);
+  outline-offset: 2px;
+}
+
+/* Attached images sit on the ledge like prints taped up, each at a slight angle. */
+.ledge-attachments {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin: 0 0 0.125rem;
+  padding: 0;
+  list-style: none;
+}
+
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.25rem;
+  background: #fff;
+  border: 1px solid var(--frame-deep);
+  box-shadow: 0 1px 2px rgb(30 30 30 / 0.15);
+  transform: rotate(-1deg);
+}
+
+.attachment:nth-child(even) {
+  transform: rotate(1.2deg);
+}
+
+.attachment img {
+  width: 2rem;
+  height: 2rem;
+  object-fit: cover;
+  display: block;
+}
+
+.attachment-name {
+  max-width: 9rem;
+  font-size: var(--step--1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment button {
+  border: 0;
+  background: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 1.125rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
 .ledge-field {
   position: relative;
   flex: 1;

@@ -18,7 +18,7 @@ import {
   type Point,
 } from '../model/types'
 import { DEFAULT_FONT, fontForFamily, fontPreset } from '../model/fonts'
-import { FILL_STYLE, LABEL_SUFFIX, type ExElement } from './exTypes'
+import { cropToHint, FILL_STYLE, flipToHint, LABEL_SUFFIX, type ExElement } from './exTypes'
 import { compileBoard, type Compiled } from './toExcalidraw'
 
 const EPS = 0.5
@@ -314,6 +314,8 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
         if (!near(ex.width, c.width) || !near(ex.height, c.height)) set.size = { w: r2(ex.width), h: r2(ex.height) }
         if (ex.fileId && ex.fileId !== el.asset) set.asset = ex.fileId
         styleHintDiff(ex, c, style, hints, false)
+        if (cropToHint(ex.crop) !== cropToHint(c.crop)) hints.crop = cropToHint(ex.crop)
+        if (flipToHint(ex.scale) !== flipToHint(c.scale)) hints.flip = flipToHint(ex.scale)
         break
       case 'draw': {
         const moved = !near(ex.x, c.x) || !near(ex.y, c.y)

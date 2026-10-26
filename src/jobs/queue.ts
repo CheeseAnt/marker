@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { runEdit, type EditStage } from '../ai/orchestrator'
 import { createProvider } from '../ai/providers'
+import type { Attachment } from '../ai/prompt'
+import { loadAsset } from '../assets/store'
 import { latestVersion, useLibrary } from '../templates/library'
 import { formatRecent, recentContext, type RecentTurn } from '../ai/recent'
 import { ProviderError, type Usage } from '../ai/providers/types'
@@ -18,6 +20,8 @@ export interface Job {
   prompt: string
   source: Extract<ChangeSource, 'ai' | 'voice'>
   selection: Id[]
+  /** Images attached to the request (selected board images are added when it runs). */
+  attachments: AttachmentRef[]
   stage: JobStage
   createdAt: number
   startedAt?: number
@@ -31,14 +35,21 @@ export interface Job {
   txId?: string
 }
 
+export interface AttachmentRef {
+  assetId: string
+  label: string
+}
+
 export const ACTIVE_STAGES: JobStage[] = ['thinking', 'repairing', 'placing']
+/** More images cost more and rarely help a whiteboard edit. */
+export const MAX_ATTACHMENTS = 4
 const KEEP_FINISHED = 20
 
 interface QueueState {
   jobs: Job[]
   /** Remote usage since the page loaded. The persistent ledger arrives in phase 9. */
   session: Usage
-  submit: (prompt: string, opts?: { source?: Job['source']; selection?: Id[] }) => string
+  submit: (prompt: string, opts?: { source?: Job['source']; selection?: Id[]; attachments?: AttachmentRef[] }) => string
   cancel: (id: string) => void
   retry: (id: string) => void
 }
@@ -81,7 +92,9 @@ export const useJobs = create<QueueState>((set, get) => {
     patch(job.id, { stage: 'thinking', startedAt: Date.now() })
     const { settings, secrets } = useSettings.getState()
     try {
+      const attachments = await resolveAttachments(job)
       const result = await runEdit({
+        attachments,
         prompt: job.prompt,
         provider: createProvider(settings, secrets),
         getBoard: () => useBoard.getState().board,
@@ -138,6 +151,7 @@ export const useJobs = create<QueueState>((set, get) => {
         prompt,
         source: opts.source ?? 'ai',
         selection: opts.selection ?? [],
+        attachments: opts.attachments ?? [],
         stage: 'queued',
         createdAt: Date.now(),
         outputTokens: 0,
@@ -155,10 +169,25 @@ export const useJobs = create<QueueState>((set, get) => {
     },
     retry: (id) => {
       const job = get().jobs.find((j) => j.id === id)
-      if (job) get().submit(job.prompt, { source: job.source, selection: job.selection })
+      if (job) get().submit(job.prompt, { source: job.source, selection: job.selection, attachments: job.attachments })
     },
   }
 })
+
+/** The job's own images, then selected board images, as data the model can see. */
+async function resolveAttachments(job: Job): Promise<Attachment[]> {
+  const board = useBoard.getState().board
+  const selectedImages: AttachmentRef[] = board.elements
+    .filter((e) => e.kind === 'image' && job.selection.includes(e.id))
+    .map((e) => ({ assetId: (e as { asset: string }).asset, label: `board image ${e.id}` }))
+  const refs = [...job.attachments, ...selectedImages].filter((r, i, all) => all.findIndex((x) => x.assetId === r.assetId) === i)
+  const out: Attachment[] = []
+  for (const ref of refs.slice(0, MAX_ATTACHMENTS)) {
+    const asset = await loadAsset(ref.assetId)
+    if (asset) out.push({ assetId: asset.id, label: ref.label, dataURL: asset.dataURL, width: asset.width, height: asset.height })
+  }
+  return out
+}
 
 const CHANGED_WHILE_RUNNING = 'The board changed while this request was running, so its changes no longer fit. Try it again.'
 

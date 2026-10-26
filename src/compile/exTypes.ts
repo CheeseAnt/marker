@@ -59,7 +59,35 @@ export interface ExElement {
   fileId?: string | null
   status?: string
   scale?: [number, number]
-  crop?: null
+  crop?: ExCrop | null
+}
+
+export interface ExCrop {
+  x: number
+  y: number
+  width: number
+  height: number
+  naturalWidth: number
+  naturalHeight: number
+}
+
+/** Image crop as a render hint: "x,y,width,height,naturalWidth,naturalHeight". */
+export function cropToHint(crop: ExCrop | null | undefined): string | null {
+  if (!crop) return null
+  return [crop.x, crop.y, crop.width, crop.height, crop.naturalWidth, crop.naturalHeight].map((n) => Math.round(n * 100) / 100).join(',')
+}
+
+export function cropFromHint(hint: unknown): ExCrop | null {
+  if (typeof hint !== 'string') return null
+  const [x, y, width, height, naturalWidth, naturalHeight] = hint.split(',').map(Number)
+  return [x, y, width, height, naturalWidth, naturalHeight].some((n) => !Number.isFinite(n)) ? null : { x, y, width, height, naturalWidth, naturalHeight }
+}
+
+/** Image flip as a render hint: "h", "v" or "hv". */
+export function flipToHint(scale: readonly [number, number] | undefined): string | null {
+  if (!scale) return null
+  const flip = `${scale[0] < 0 ? 'h' : ''}${scale[1] < 0 ? 'v' : ''}`
+  return flip || null
 }
 
 export const LABEL_SUFFIX = '~label'

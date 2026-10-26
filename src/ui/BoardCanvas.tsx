@@ -3,6 +3,8 @@ import { CaptureUpdateAction, Excalidraw, Footer, hashElementsVersion, MainMenu,
 import type { AppState, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import { diffSceneDetailed } from '../compile/fromExcalidraw'
+import { imageSize } from '../assets/image'
+import { cachedAsset, loadAsset, saveAsset } from '../assets/store'
 import { detachOps } from '../templates/detach'
 import { useToast } from '../state/toast'
 import type { ExElement } from '../compile/exTypes'
@@ -14,6 +16,29 @@ import { LABEL_SUFFIX } from '../compile/exTypes'
 import { debounce } from '../storage/idb'
 
 const HIGHLIGHT_MS = 1600
+
+/** Gives Excalidraw the bytes of any board image it doesn't have yet. */
+async function loadImages(api: ExcalidrawImperativeAPI) {
+  const have = api.getFiles()
+  const wanted = new Set(
+    api
+      .getSceneElements()
+      .flatMap((e) => (e.type === 'image' && e.fileId && !have[e.fileId] ? [e.fileId] : [])),
+  )
+  const found = (await Promise.all([...wanted].map(loadAsset))).filter((a) => a !== undefined)
+  if (found.length) {
+    api.addFiles(found.map((a) => ({ id: a.id as never, dataURL: a.dataURL as never, mimeType: a.mimeType as never, created: a.created })))
+  }
+}
+
+/** Keeps the bytes of images pasted or dropped onto the canvas, so the board can show them again. */
+async function storeImages(api: ExcalidrawImperativeAPI) {
+  for (const file of Object.values(api.getFiles())) {
+    if (cachedAsset(file.id)) continue
+    const { width, height } = await imageSize(file.dataURL).catch(() => ({ width: 0, height: 0 }))
+    await saveAsset({ id: file.id, mimeType: file.mimeType, dataURL: file.dataURL, width, height, created: file.created })
+  }
+}
 
 interface HighlightBox {
   x: number
@@ -96,6 +121,7 @@ export function BoardCanvas({ onError }: Props) {
       captureUpdate: CaptureUpdateAction.NEVER,
     })
     seenVersion.current = hashElementsVersion(api.getSceneElementsIncludingDeleted())
+    void loadImages(api)
 
     const ids = pendingHighlight.current
     pendingHighlight.current = null
@@ -163,6 +189,7 @@ export function BoardCanvas({ onError }: Props) {
     const version = hashElementsVersion(scene)
     if (version === seenVersion.current) return
     seenVersion.current = version
+    void storeImages(api)
     const { board, compiled, apply } = useBoard.getState()
     try {
       const { ops, rejected } = diffSceneDetailed({ board, compiled, scene: scene as unknown as ExElement[] })
@@ -228,6 +255,9 @@ export function BoardCanvas({ onError }: Props) {
         initialData={initialData}
         excalidrawAPI={(api) => {
           apiRef.current = api
+          void loadImages(api)
+          // Lets end-to-end tests check which image files the canvas has.
+          if (import.meta.env.DEV) Object.assign(window, { __boardbotFiles: () => Object.keys(api.getFiles()) })
           // Text is measured when rendered; a font that arrives later would leave it clipped.
           // Load every preset face, then render again so all text is measured in its real font.
           Promise.all(FONT_PRESETS.map((f) => document.fonts.load(`20px "${f.css}"`)))

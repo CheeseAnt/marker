@@ -8,6 +8,7 @@ import {
   idSchema,
   parseTemplateKey,
   type Endpoint,
+  type Id,
   shapes,
   styleSchema,
   type Board,
@@ -113,6 +114,13 @@ export const llmOpSchema = z.discriminatedUnion('op', [
     part_style: z.record(z.string(), styleSchema).optional().describe('Style changes for parts of this copy only, by part id.'),
   }),
   z.object({ op: z.literal('detach'), id: idSchema.describe('Turns a template copy into ordinary elements so its parts can be edited freely.') }),
+  z.object({
+    op: z.literal('add_image'),
+    id: idSchema,
+    asset: z.string().min(1).describe('The asset id of an attached image (see "Attached images").'),
+    place: placeSchema.optional(),
+    size: sizeSchema.optional().describe('Omit to keep its proportions at a sensible size.'),
+  }),
   z.object({ op: z.literal('remove'), id: idSchema.describe('Removing a node also removes its edges.') }),
   z.object({ op: z.literal('group'), id: idSchema, members: z.array(idSchema).min(1), label: z.string().optional() }),
   z.object({ op: z.literal('ungroup'), id: idSchema.describe('The group to dissolve; its members stay.') }),
@@ -157,7 +165,14 @@ function toPlacement(place: z.infer<typeof placeSchema>): Placement {
 export interface TranslateContext {
   /** Latest version of each template the model may add, by name. */
   templates: TemplateVersion[]
+  /** Images the model may place, with their natural size, by asset id. */
+  images?: Map<string, { width: number; height: number }>
+  /** Where to put an image the model gave no place: next to this element. */
+  anchor?: Id
 }
+
+/** Largest side of an image placed without a size. */
+const IMAGE_DEFAULT_SIDE = 320
 
 export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext = { templates: [] }): { ops: Op[]; issues: string[] } {
   const ops: Op[] = []
@@ -304,6 +319,21 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
           ops.push(...detach)
           known.set(o.id, 'group')
         }
+        break
+      }
+      case 'add_image': {
+        const natural = ctx.images?.get(o.asset)
+        if (!natural) {
+          issues.push(`${at}: there is no attached image "${o.asset}" (attached: ${[...(ctx.images?.keys() ?? [])].join(', ') || 'none'})`)
+          break
+        }
+        used.add(o.id)
+        known.set(o.id, 'image')
+        const fit = Math.min(1, IMAGE_DEFAULT_SIDE / Math.max(natural.width, natural.height, 1))
+        const size = o.size ?? { w: Math.round(natural.width * fit) || IMAGE_DEFAULT_SIDE, h: Math.round(natural.height * fit) || IMAGE_DEFAULT_SIDE }
+        const anchor = ctx.anchor ?? [...board.elements].reverse().find((e) => e.kind === 'node' || e.kind === 'text' || e.kind === 'image' || e.kind === 'instance')?.id
+        const position: Placement = o.place ? toPlacement(o.place) : anchor ? { kind: 'rel', dir: 'right', of: anchor, gap: 60 } : { kind: 'at', x: 0, y: 0 }
+        ops.push({ op: 'add', element: { ...empty, kind: 'image', id: o.id, asset: o.asset, at: position, size } })
         break
       }
       case 'remove':

@@ -263,3 +263,16 @@ edge e a -> b "labelled" font=virgil
     expect(family(compileBoard(next).elements, 'b~label')).toBe(7)
   })
 })
+
+describe('images', () => {
+  const pics = parseBoard('board "p" v1\nimage i1 asset:abc at(0,0) size(300,150)\n')
+
+  it('keeps crops and flips made on the canvas', () => {
+    const { ops, next, again } = editScene(pics, (s) => {
+      Object.assign(byId(s, 'i1'), { crop: { x: 10, y: 0, width: 200, height: 150, naturalWidth: 300, naturalHeight: 150 }, scale: [-1, 1] })
+    })
+    expect(ops).toEqual([{ op: 'update', id: 'i1', set: { hints: { crop: '10,0,200,150,300,150', flip: 'h' } } }])
+    expect(byId(compileBoard(next).elements, 'i1')).toMatchObject({ crop: { x: 10, width: 200 }, scale: [-1, 1] })
+    expect(again).toEqual([])
+  })
+})

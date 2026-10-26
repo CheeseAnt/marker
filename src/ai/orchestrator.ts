@@ -6,7 +6,7 @@ import type { Op } from '../model/ops'
 import type { Board, Id } from '../model/types'
 import type { TemplateVersion } from '../templates/operations'
 import { editArgsSchema, replyArgsSchema, toCoreOps } from './llmOps'
-import { buildContext, SYSTEM_PROMPT } from './prompt'
+import { buildContext, SYSTEM_PROMPT, type Attachment } from './prompt'
 import { ProviderError, type ChatMessage, type LLMProvider, type ToolCall, type ToolDef, type Usage } from './providers/types'
 
 export const MAX_REPAIRS = 2
@@ -48,6 +48,8 @@ export interface EditRequest {
   recent?: string
   /** Library templates the model may add (latest version of each). */
   templates?: TemplateVersion[]
+  /** Images sent with the request; the model can see them and place them with add_image. */
+  attachments?: Attachment[]
   signal?: AbortSignal
   onStage?: (stage: EditStage, detail: { outputTokens: number; repair: number }) => void
 }
@@ -79,9 +81,20 @@ function touchedIds(ops: Op[]): Id[] {
  * board, sends problems back for up to MAX_REPAIRS rounds, then lays out new nodes.
  */
 export async function runEdit(req: EditRequest): Promise<EditResult> {
+  const attachments = req.attachments ?? []
+  if (attachments.length && !req.provider.capabilities.vision) {
+    throw new ProviderError('config', `${req.provider.label} can't look at images. Remove the attachments, or choose a model that can.`)
+  }
+  const context = buildContext({ board: req.getBoard(), selection: req.selection, recent: req.recent, templates: req.templates, attachments }, req.prompt)
   const messages: ChatMessage[] = [
-    { role: 'user', content: buildContext({ board: req.getBoard(), selection: req.selection, recent: req.recent, templates: req.templates }, req.prompt) },
+    {
+      role: 'user',
+      content: attachments.length
+        ? [{ type: 'text', text: context }, ...attachments.map((a) => ({ type: 'image' as const, dataUrl: a.dataURL }))]
+        : context,
+    },
   ]
+  const images = new Map(attachments.map((a) => [a.assetId, { width: a.width, height: a.height }]))
   let usage: Usage = { inputTokens: 0, outputTokens: 0 }
 
   for (let repair = 0; ; repair++) {
@@ -148,7 +161,7 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
       if (!(e instanceof OpError)) throw e
       throw new ProviderError('bad-request', `Couldn't undo the last ${undoCount === 1 ? 'change' : `${undoCount} changes`}: ${e.issues[0]}`)
     }
-    const { ops, issues } = toCoreOps(board, parsed.data.ops, { templates: req.templates ?? [] })
+    const { ops, issues } = toCoreOps(board, parsed.data.ops, { templates: req.templates ?? [], images, anchor: req.selection[0] })
     if (issues.length) {
       problems(issues)
       continue

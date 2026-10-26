@@ -146,7 +146,7 @@ describe('runEdit', () => {
   it('offers tool schemas the model can follow', () => {
     const edit = TOOLS[0].parameters as { properties: { ops: { items: { oneOf?: unknown[]; anyOf?: unknown[] } } } }
     const variants = edit.properties.ops.items.oneOf ?? edit.properties.ops.items.anyOf
-    expect(variants).toHaveLength(13)
+    expect(variants).toHaveLength(14)
     expect(edit.properties).toHaveProperty('undo_first')
   })
 })
@@ -218,6 +218,37 @@ text note "nginx" below(box,10)
   it('names the templates that exist when the model asks for one that does not', () => {
     const { issues } = toCoreOps(board, [{ op: 'add_copy', template: 'database' }], { templates })
     expect(issues).toEqual(['ops[0] (add_copy): there is no template "database" (available: server)'])
+  })
+})
+
+describe('attachments', () => {
+  const logo = { assetId: 'abc123', label: 'logo.png', dataURL: 'data:image/png;base64,AAAA', width: 800, height: 400 }
+
+  it('sends images after the text and lets the model place them', async () => {
+    const { provider, requests } = scripted([edit('Placed the logo', [{ op: 'add_image', id: 'logo', asset: 'abc123' }])])
+    const result = await runEdit({ prompt: 'put this logo next to the API', provider, getBoard: () => board, getHistory: () => emptyHistory(), selection: ['api'], attachments: [logo] })
+    const content = requests[0].messages[0].content as { type: string; text?: string; dataUrl?: string }[]
+    expect(content.map((p) => p.type)).toEqual(['text', 'image'])
+    expect(content[0].text).toContain('Attached images, in the order they follow: 1. "logo.png" (asset abc123, 800x400). Place one on the board with add_image.')
+    expect(content[1].dataUrl).toBe(logo.dataURL)
+    if (result.kind !== 'edit') throw new Error()
+    expect(commit(board, result.ops).board.elements.find((e) => e.id === 'logo')).toMatchObject({
+      kind: 'image',
+      asset: 'abc123',
+      size: { w: 320, h: 160 },
+      at: { kind: 'rel', dir: 'right', of: 'api' },
+    })
+  })
+
+  it('only places images that were attached', () => {
+    const { issues } = toCoreOps(board, [{ op: 'add_image', id: 'x', asset: 'nope' }], { templates: [], images: new Map([['abc123', { width: 1, height: 1 }]]) })
+    expect(issues).toEqual(['ops[0] (add_image "x"): there is no attached image "nope" (attached: abc123)'])
+  })
+
+  it('refuses images for a model that cannot see them', async () => {
+    const { provider } = scripted([])
+    const blind = { ...provider, capabilities: { ...provider.capabilities, vision: false } }
+    await expect(runEdit({ prompt: 'x', provider: blind, getBoard: () => board, getHistory: () => emptyHistory(), selection: [], attachments: [logo] })).rejects.toThrow(/can't look at images/)
   })
 })
 

@@ -424,6 +424,19 @@ recording → transcribing → queued → building context → calling model →
 - **Model:** each request gets a catalog of templates (description, fill-ins with defaults, ports, parts), and board text is sent without `define` blocks. New ops `add_copy` (library latest, or the board's version), `update_copy` (params, place, scale, `part_text`, `part_style`) and `detach`; edges accept `copy.port`.
 - **Not yet:** a canvas badge for "update available" (shown in the Templates tab instead), `.boardlib` import/export (phase 10, with files), and editing a template visually in place. Edit a template by detaching a copy, changing it, and saving it again under the same name, which creates the next version.
 
+**Phase 6: images (done, 2026-10-26)**
+- **Asset store (`src/assets/`):** IndexedDB `boardbot.asset.<sha1>` holding the data URL, mime type and natural size. The id is the SHA-1 of the bytes, which matches Excalidraw's file ids, so a pasted or dropped image's `fileId` is the board's `asset:<id>`.
+- **Canvas:** new files are stored when the scene is read; files the board needs are loaded into Excalidraw (`addFiles`) on startup and after every render. Crop and flip made in Excalidraw round-trip as `crop` and `flip` hints.
+- **Attachments:**
+  - paperclip, paste or drop onto the ledge, up to 4 images;
+  - images are downscaled to 1568px on the long side (photos as JPEG, everything else PNG) and saved as assets;
+  - selected board images are attached automatically.
+  - They're sent as image parts after the text, and the context lists them by label, asset id and size. Providers without vision refuse with a clear message.
+- **Model:** `add_image {id, asset, place?, size?}` places an attached image. Without a size it fits within 320px keeping proportions; without a place it goes right of the selection, or of the last element.
+- **Later:**
+  - embedding asset bytes in saved `.board` / `.boardz` files comes with file save in phase 10 (for now assets live beside the board in IndexedDB);
+  - unused assets are never cleaned up yet.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

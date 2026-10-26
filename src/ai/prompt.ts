@@ -31,11 +31,23 @@ How to edit:
 - To undo, or to undo something and do it another way, set undo_first to how many of the newest changes to undo, and give the replacement ops (or none for a plain undo).
 - Good colours on a whiteboard: fills #a5d8ff (blue), #b2f2bb (green), #ffec99 (yellow), #ffc9c9 (red), #d0bfff (violet), #eebefa (pink); strokes #1e1e1e, #1971c2, #2f9e44, #e03131, #f08c00.
 - "use" lines are copies of templates: reusable drawings with fill-in text and named ports. Add them with add_copy; change one copy's fill-ins, parts' text or parts' style with update_copy; attach edges to a port with "copyId.port". A copy's parts can't be moved on their own; detach the copy first if the user wants to rearrange it. Prefer a template from the catalog when the user asks for something it already draws.
+- You can see images the user attaches. Use them as reference for what to draw; put one on the board with add_image only when the user asks for the image itself.
 - For a request that asks a question instead of a change, or is too unclear to act on, call reply.`
+
+/** An image sent with a request. */
+export interface Attachment {
+  assetId: string
+  /** What the user knows it as: a file name, or the board element it came from. */
+  label: string
+  dataURL: string
+  width: number
+  height: number
+}
 
 export interface ContextInput {
   board: Board
   selection: Id[]
+  attachments?: Attachment[]
   /** Templates the model may add, newest version of each. */
   templates?: TemplateVersion[]
   /** Recent conversation and changes, already formatted (see formatRecent). */
@@ -84,7 +96,7 @@ export function templateCatalog(board: Board, templates: TemplateVersion[]): str
   return `Templates you can add with add_copy:\n${lines.join('\n')}`
 }
 
-export function buildContext({ board, selection, recent, templates = [] }: ContextInput, request: string): string {
+export function buildContext({ board, selection, recent, templates = [], attachments = [] }: ContextInput, request: string): string {
   const full = printBoard(board, { hints: false, definitions: false })
   let boardText = full
   if (full.length > FULL_BOARD_CHAR_LIMIT) {
@@ -110,7 +122,10 @@ export function buildContext({ board, selection, recent, templates = [] }: Conte
     ].join('\n')
   }
   const selected = selection.length ? `Selected: ${selection.join(', ')}` : 'Nothing is selected.'
+  const images = attachments.length
+    ? `\nAttached images, in the order they follow: ${attachments.map((a, i) => `${i + 1}. "${a.label}" (asset ${a.assetId}, ${a.width}x${a.height})`).join('; ')}. Place one on the board with add_image.`
+    : ''
   const history = recent ? `${recent}\n\n` : ''
   const catalog = templateCatalog(board, templates)
-  return `${history}${catalog ? `${catalog}\n\n` : ''}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}\n\nRequest: ${request}`
+  return `${history}${catalog ? `${catalog}\n\n` : ''}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}${images}\n\nRequest: ${request}`
 }
