@@ -32,6 +32,8 @@ export const settingsSchema = z.object({
   voice: voiceSettings.prefault({}),
   shortcuts: shortcutSettings.prefault({}),
   jobConcurrency: z.number().int().min(1).max(8).default(2),
+  /** 'system' follows the operating system's light or dark setting. */
+  theme: z.enum(['system', 'light', 'dark']).default('system'),
   /** Prices per deployment name, overriding the defaults for known models. */
   pricing: z.record(z.string(), priceSchema).default({}),
   /** Monthly spending in US dollars: a warning, and a limit that stops new requests. 0 means none. */

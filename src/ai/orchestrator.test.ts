@@ -5,7 +5,8 @@ import { resolveBoxes } from '../model/geometry'
 import { emptyHistory, record } from '../history/history'
 import { toCoreOps } from './llmOps'
 import { runEdit, TOOLS } from './orchestrator'
-import { buildContext, FULL_BOARD_CHAR_LIMIT } from './prompt'
+import { buildContext, FULL_BOARD_CHAR_LIMIT, templateCatalog } from './prompt'
+import { emptyBoard } from '../model/types'
 import type { ChatRequest, ChatResult, LLMProvider } from './providers/types'
 
 const board = parseBoard(`board "Shop" v1
@@ -146,7 +147,7 @@ describe('runEdit', () => {
   it('offers tool schemas the model can follow', () => {
     const edit = TOOLS[0].parameters as { properties: { ops: { items: { oneOf?: unknown[]; anyOf?: unknown[] } } } }
     const variants = edit.properties.ops.items.oneOf ?? edit.properties.ops.items.anyOf
-    expect(variants).toHaveLength(14)
+    expect(variants).toHaveLength(15)
     expect(edit.properties).toHaveProperty('undo_first')
   })
 })
@@ -164,6 +165,14 @@ describe('toCoreOps', () => {
     expect(ops[1]).toEqual({ op: 'reorder', id: 'api', after: 'e1' })
     expect(ops[2]).toEqual({ op: 'board', set: { defaults: { font: 'display' } } })
     expect(issues).toEqual(['ops[1] (update "e1"): only nodes have a shape', 'ops[1] (update "e1"): nothing to change', 'ops[3] (ungroup "api"): "api" is not a group'])
+  })
+
+  it('adds a frame, and changes it with the same op', () => {
+    const first = toCoreOps(board, [{ op: 'frame', id: 'f', label: 'Backend', members: ['api', 'db'] }])
+    expect(first.ops).toEqual([{ op: 'add', element: { kind: 'frame', id: 'f', label: 'Backend', members: ['api', 'db'], style: {}, hints: {} } }])
+    const framed = commit(board, first.ops).board
+    expect(toCoreOps(framed, [{ op: 'frame', id: 'f', label: 'Data', members: ['db'] }]).ops).toEqual([{ op: 'update', id: 'f', set: { label: 'Data', members: ['db'] } }])
+    expect(toCoreOps(board, [{ op: 'frame', id: 'api', label: 'x', members: [] }]).issues).toEqual(['ops[0] (frame "api"): "api" is already a node'])
   })
 
   it('leaves room for a label on the arrow to a relatively placed node', () => {
@@ -294,5 +303,14 @@ describe('buildContext', () => {
     expect(text).toContain('edge link n5 -> n6')
     expect(text).not.toContain('node n7 ')
     expect(text).toContain('n7 (node "Node number 7')
+  })
+})
+
+describe('templateCatalog', () => {
+  it('tells the model which fill-ins are colours and what they colour', () => {
+    const chip = parseBoard('board "Chip" v1\ntemplate chip "A coloured chip"\nparam label "Chip"\nparam color "#a5d8ff"\n\nnode box "{label}" rect at(0,0) fill={color}\n')
+    expect(templateCatalog(emptyBoard(), [{ name: 'chip', version: 1, board: chip }])).toContain(
+      'Fill in: label (default "Chip"), color (a colour: fill of box; default "#a5d8ff").',
+    )
   })
 })

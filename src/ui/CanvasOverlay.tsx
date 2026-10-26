@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 import type { Box } from '../model/geometry'
+import { useBoard } from '../state/board'
+import { updateCopies } from '../templates/actions'
+import { outdatedCopies, useLibrary } from '../templates/library'
 import { toScreen, type View } from './canvasView'
 
 /** A dragged element and one that will move with it because it's placed relative to it. */
@@ -27,6 +30,7 @@ function edgePoint(b: Box, toward: { x: number; y: number }) {
 export function CanvasOverlay({ view, links, children }: { view: View; links: FollowLink[]; children?: ReactNode }) {
   return (
     <div className="canvas-overlay">
+      <UpdateBadges view={view} />
       {links.length > 0 && (
         <svg className="follow-links" aria-hidden="true">
           {links.map((l, i) => {
@@ -46,4 +50,28 @@ export function CanvasOverlay({ view, links, children }: { view: View; links: Fo
       {children}
     </div>
   )
+}
+
+/** A small pill on each template copy that has a newer version in the library. */
+function UpdateBadges({ view }: { view: View }) {
+  const board = useBoard((s) => s.board)
+  const boxes = useBoard((s) => s.compiled.boxes)
+  const entries = useLibrary((s) => s.entries)
+  return outdatedCopies(board, entries).map(({ copy, latest }) => {
+    const box = boxes.get(copy.id)
+    if (!box) return null
+    const screen = toScreen(box, view)
+    return (
+      <button
+        key={copy.id}
+        type="button"
+        className="update-badge"
+        style={{ left: screen.x + screen.w, top: screen.y }}
+        title={`A newer version of “${latest.name}” is in your library. Update this copy; undo goes back.`}
+        onClick={() => updateCopies(latest, [copy.id])}
+      >
+        Update to v{latest.version}
+      </button>
+    )
+  })
 }

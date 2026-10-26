@@ -85,3 +85,29 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   expect(exported).toMatchObject({ schema: 'marker-library', templates: [{ name: 'web_server', versions: [{ version: 1 }] }] })
   expect(errors).toEqual([])
 })
+
+test('a copy with a newer version in the library shows an update badge that updates just that copy', async ({ page }) => {
+  await freshApp(page)
+  const define = (label: string) => `define box@1 {\n  board "Box" v1\n  template box\n\n  node b "${label}" rect at(0,0) size(140,60)\n}\n`
+  await setBoardText(page, `board "B" v1\n\nuse one box@1 at(200,150)\nuse two box@1 at(200,350)\n\n${define('Old')}`)
+  const version = (n: number, label: string) => ({ version: n, text: `board "Box" v1\ntemplate box\n\nnode b "${label}" rect at(0,0) size(140,60)\n` })
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
+  await page.locator('input[type=file][accept*="boardlib"], .template-transfer input[type=file]').first().setInputFiles({
+    name: 'box.boardlib',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ schema: 'marker-library', version: 1, templates: [{ name: 'box', versions: [version(1, 'Old'), version(2, 'New')] }] })),
+  })
+  await page.getByRole('button', { name: 'Templates', exact: true }).click()
+
+  const badges = page.locator('.update-badge')
+  await expect(badges).toHaveCount(2)
+  await expect(badges.first()).toHaveText('Update to v2')
+  await page.screenshot({ path: 'e2e/screenshots/template-badge.png' })
+  await badges.first().click()
+  await expect(badges).toHaveCount(1)
+  const s = await state(page)
+  expect(s.board.elements.map((e) => [e.id, (e as { template?: string }).template])).toEqual([
+    ['one', 'box@2'],
+    ['two', 'box@1'],
+  ])
+})

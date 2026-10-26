@@ -1,7 +1,7 @@
 import { fontPreset, type FontId } from './fonts'
 import { parsePath } from './path'
 import { instanceContent, MAX_NESTING } from '../templates/expand'
-import type { Board, BoardElement, Id, InstanceElement, NodeElement, Placement, Size, Style, TextElement } from './types'
+import type { Board, BoardElement, FrameElement, Id, InstanceElement, NodeElement, Placement, Size, Style, TextElement } from './types'
 
 export interface Box {
   x: number
@@ -25,6 +25,28 @@ export function measureText(text: string, fontSize: number, font?: FontId): Size
   return { w: Math.ceil(longest * fontSize * fontPreset(font).charWidth), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
 }
 
+/** Breaks text into lines at spaces so each fits `maxWidth`, by the same estimate as measureText. */
+export function wrapText(text: string, fontSize: number, font: FontId | undefined, maxWidth: number): string {
+  const charW = fontSize * fontPreset(font).charWidth
+  const perLine = Math.max(1, Math.floor(maxWidth / charW))
+  return text
+    .split('\n')
+    .map((line) => {
+      const out: string[] = []
+      let current = ''
+      for (const word of line.split(' ')) {
+        const next = current ? `${current} ${word}` : word
+        if (next.length > perLine && current) {
+          out.push(current)
+          current = word
+        } else current = next
+      }
+      out.push(current)
+      return out.join('\n')
+    })
+    .join('\n')
+}
+
 /** Estimated size of an edge's label, if it has one. */
 export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefined {
   if (edge.kind !== 'edge' || !edge.label) return undefined
@@ -35,12 +57,18 @@ export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefine
 /** Room to leave around a label on an arrow, so some of the arrow still shows either side. */
 export const LABEL_MARGIN = 40
 
+const MAX_NODE_WIDTH = 480
+
 export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
-  const text = measureText(node.label || ' ', fontSize, font)
-  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape]
+  const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70], cylinder: [40, 70] }[node.shape] // a cylinder's rims take 48px of its height at most
   const min = node.shape === 'sticky' ? { w: 160, h: 160 } : node.shape === 'cylinder' ? { w: 120, h: 90 } : { w: 120, h: 60 }
+  let text = measureText(node.label || ' ', fontSize, font)
+  // A label too long for the widest default wraps (in boxy shapes), so the shape grows taller.
+  if (text.w + pad[0] > MAX_NODE_WIDTH && ['rect', 'sticky', 'cylinder'].includes(node.shape)) {
+    text = measureText(wrapText(node.label, fontSize, font, MAX_NODE_WIDTH - 20), fontSize, font)
+  }
   return {
-    w: Math.max(min.w, Math.min(480, text.w + pad[0])),
+    w: Math.max(min.w, Math.min(MAX_NODE_WIDTH, text.w + pad[0])),
     h: Math.max(min.h, text.h + pad[1]),
   }
 }
@@ -215,7 +243,20 @@ export function resolveBoxes(board: Board, depth = 0): Map<Id, Box> {
   for (const el of board.elements) {
     if (el.kind === 'group') groupBox(el.id, byId, boxes, new Set())
   }
+  for (const el of board.elements) {
+    if (el.kind === 'frame') boxes.set(el.id, frameBox(el, boxes))
+  }
   return boxes
+}
+
+/** Space a frame leaves around its members when it fits them, with room for its name above. */
+export const FRAME_PADDING = 40
+
+function frameBox(el: FrameElement, boxes: Map<Id, Box>): Box {
+  if (el.at && el.size) return { ...el.at, ...el.size }
+  const inner = unionBoxes(el.members.flatMap((m) => boxes.get(m) ?? []))
+  if (!inner) return { x: el.at?.x ?? 0, y: el.at?.y ?? 0, w: 200, h: 120 }
+  return { x: inner.x - FRAME_PADDING, y: inner.y - FRAME_PADDING, w: inner.w + FRAME_PADDING * 2, h: inner.h + FRAME_PADDING * 2 }
 }
 
 function groupBox(id: Id, byId: Map<Id, BoardElement>, boxes: Map<Id, Box>, seen: Set<Id>): Box | undefined {

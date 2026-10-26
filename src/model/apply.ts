@@ -1,7 +1,10 @@
 import { resolveBoxes } from './geometry'
 import { FIXED_FIELDS, MERGED_FIELDS, type Op } from './ops'
-import { definitionCycle, usedDefinitions } from '../templates/expand'
-import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Id, type InstanceElement } from './types'
+import { definitionCycle, styleParamsIn, usedDefinitions } from '../templates/expand'
+
+/** Colours a style param may be filled with: hex, a CSS colour name, rgb()/hsl(), or transparent. */
+const COLOUR = /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]+|(rgb|rgba|hsl|hsla)\([^)]*\))$/
+import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Endpoint, type Id, type InstanceElement } from './types'
 
 export class OpError extends Error {
   readonly issues: string[]
@@ -136,6 +139,11 @@ export function applyOp(board: Board, op: Op): { board: Board; inverse: Op } {
         inverse: prev ? { op: 'define', key: op.key, board: prev as never } : { op: 'undefine', key: op.key },
       }
     }
+    case 'rename': {
+      if (indexOf(board, op.from) < 0) throw new OpError([`cannot rename unknown element "${op.from}"`])
+      if (indexOf(board, op.to) >= 0) throw new OpError([`id "${op.to}" already exists`])
+      return { board: renameRefs(board, op.from, op.to), inverse: { op: 'rename', from: op.to, to: op.from } }
+    }
     case 'undefine': {
       const prev = board.definitions[op.key]
       if (!prev) throw new OpError([`there is no template ${op.key} to remove`])
@@ -144,6 +152,23 @@ export function applyOp(board: Board, op: Op): { board: Board; inverse: Op } {
       return { board: { ...board, definitions }, inverse: { op: 'define', key: op.key, board: prev as never } }
     }
   }
+}
+
+/** The board with element `from` called `to`, and every reference to it following. */
+function renameRefs(board: Board, from: Id, to: Id): Board {
+  const swap = (id: Id) => (id === from ? to : id)
+  const elements = board.elements.map((el): BoardElement => {
+    let next: BoardElement = el.id === from ? { ...el, id: to } : el
+    if (next.kind === 'edge') {
+      const end = (e: Endpoint): Endpoint => ('id' in e && e.id === from ? { ...e, id: to } : e)
+      next = { ...next, from: end(next.from), to: end(next.to) }
+    }
+    if ((next.kind === 'group' || next.kind === 'frame') && next.members.includes(from)) next = { ...next, members: next.members.map(swap) }
+    if ('at' in next && next.at && 'kind' in next.at && next.at.kind === 'rel' && next.at.of === from) next = { ...next, at: { ...next.at, of: to } } as BoardElement
+    return next
+  })
+  const template = board.template && { ...board.template, ports: board.template.ports.map((p) => ({ ...p, target: swap(p.target) })) }
+  return { ...board, elements, ...(template && { template }) }
 }
 
 /** Ops needed before removing `id` so nothing is left pointing at it. */
@@ -158,6 +183,9 @@ function cascadeFor(board: Board, id: Id): Op[] {
     } else if (el.kind === 'group' && el.members.includes(id)) {
       const members = el.members.filter((m) => m !== id)
       ops.push(members.length ? { op: 'update', id: el.id, set: { members } } : { op: 'remove', id: el.id })
+    } else if (el.kind === 'frame' && el.members.includes(id)) {
+      // An emptied frame stays: it is a named area, and can be filled again.
+      ops.push({ op: 'update', id: el.id, set: { members: el.members.filter((m) => m !== id) } })
     } else if ('at' in el && el.at && 'kind' in el.at && el.at.kind === 'rel' && el.at.of === id) {
       // Keep dependents where they are by pinning them to their current position.
       boxes ??= resolveBoxes(board)
@@ -180,6 +208,7 @@ export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): 
     !!el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'draw' || el.kind === 'instance')
 
   const parentOf = new Map<Id, Id>()
+  const frameOf = new Map<Id, Id>()
   for (const el of board.elements) {
     if (el.kind === 'edge') {
       for (const [side, end] of [['from', el.from], ['to', el.to]] as const) {
@@ -200,10 +229,20 @@ export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): 
     if ((el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance') && el.at?.kind === 'rel') {
       if (!isAnchor(byId.get(el.at.of))) issues.push(`"${el.id}" is placed ${el.at.dir} unknown "${el.at.of}"`)
     }
+    if (el.kind === 'frame') {
+      for (const m of el.members) {
+        const member = byId.get(m)
+        if (!member) issues.push(`frame "${el.id}" has unknown member "${m}"`)
+        else if (member.kind === 'frame') issues.push(`frame "${el.id}" can't contain frame "${m}"`)
+        if (frameOf.has(m)) issues.push(`"${m}" is in both frames "${frameOf.get(m)}" and "${el.id}"`)
+        frameOf.set(m, el.id)
+      }
+    }
     if (el.kind === 'group') {
       for (const m of el.members) {
         const member = byId.get(m)
         if (!member) issues.push(`group "${el.id}" has unknown member "${m}"`)
+        else if (member.kind === 'frame') issues.push(`group "${el.id}" can't contain frame "${m}"`)
         if (parentOf.has(m)) issues.push(`"${m}" is in both groups "${parentOf.get(m)}" and "${el.id}"`)
         parentOf.set(m, el.id)
       }
@@ -244,6 +283,10 @@ function checkInstance(board: Board, el: InstanceElement): string[] {
       issues.push(`"${el.id}": ${spec.name} has no parameter "${name}" (it has ${spec.params.map((p) => p.name).join(', ') || 'none'})`)
     }
   }
+  for (const name of styleParamsIn(def)) {
+    const value = el.params[name] ?? spec.params.find((p) => p.name === name)?.default
+    if (value !== undefined && !COLOUR.test(value)) issues.push(`"${el.id}": ${name} is a colour, like #a5d8ff, not "${value}"`)
+  }
   for (const path of Object.keys(el.overrides)) {
     const child = path.split('/')[0]
     if (!def.elements.some((c) => c.id === child)) issues.push(`"${el.id}" overrides "${path}", which ${spec.name} doesn't contain`)
@@ -261,6 +304,9 @@ function checkTemplates(board: Board, withDefinitions: boolean): string[] {
     }
     const names = board.template.params.map((p) => p.name)
     if (new Set(names).size !== names.length) issues.push('template parameters must have different names')
+    for (const name of styleParamsIn(board)) {
+      if (!names.includes(name)) issues.push(`a style uses {${name}}, but the template has no param "${name}"`)
+    }
   }
   if (!withDefinitions) return issues
   for (const [key, def] of Object.entries(board.definitions)) {

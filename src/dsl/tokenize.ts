@@ -100,6 +100,11 @@ export function tokenizeLine(src: string, line: number): Token[] {
     } else if (src.startsWith('->', i) || src.startsWith('<-', i) || src.startsWith('--', i)) {
       tokens.push({ t: 'head', v: src.slice(i, i + 2) as '->' | '<-' | '--', col })
       i += 2
+    } else if (c === '{' && /^\{[A-Za-z_][A-Za-z0-9_]*\}/.test(src.slice(i))) {
+      // A template param standing in for a style value: fill={color}.
+      const end = src.indexOf('}', i) + 1
+      tokens.push({ t: 'word', v: src.slice(i, end), col })
+      i = end
     } else if ('(),[]='.includes(c)) {
       tokens.push({ t: 'punct', v: c as '(' | ')' | ',' | '[' | ']' | '=', col })
       i++

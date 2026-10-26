@@ -1,3 +1,4 @@
+import { STYLE_PARAM_KEYS, styleParam } from '../templates/expand'
 import { printBoard, printElement } from '../dsl/print'
 import { FONT_PRESETS } from '../model/fonts'
 import { parseTemplateKey } from '../model/types'
@@ -14,6 +15,7 @@ export const SYSTEM_PROMPT = `You edit a hand-drawn whiteboard for the user. The
   edge <id> <from> -> <to> ["label"] [dashed|dotted] [style]     (heads: ->, <-, <->, --)
   text <id> "<text>" [placement] [style]
   group <id> ["label"] [member, member, ...]
+  frame <id> "<name>" [member, member, ...] [at(x,y) size(w,h)]     (a named area drawn around its members)
   draw <id> at(x,y) path="<svg path>"
   image <id> asset:<id> at(x,y) size(w,h)
   use <id> <template>@<version> [placement] [scale(n)] [with(param="value", ...)] [override(part.text="...", part.fill=#hex, ...)]
@@ -30,7 +32,7 @@ How to edit:
 - When the user agrees to something you suggested ("yes", "do that"), carry out what you proposed in your last reply.
 - To undo, or to undo something and do it another way, set undo_first to how many of the newest changes to undo, and give the replacement ops (or none for a plain undo).
 - Good colours on a whiteboard: fills #a5d8ff (blue), #b2f2bb (green), #ffec99 (yellow), #ffc9c9 (red), #d0bfff (violet), #eebefa (pink); strokes #1e1e1e, #1971c2, #2f9e44, #e03131, #f08c00.
-- "use" lines are copies of templates: reusable drawings with fill-in text and named ports. Add them with add_copy; change one copy's fill-ins, parts' text or parts' style with update_copy; attach edges to a port with "copyId.port". A copy's parts can't be moved on their own; detach the copy first if the user wants to rearrange it. Prefer a template from the catalog when the user asks for something it already draws.
+- "use" lines are copies of templates: reusable drawings with fill-in text (or colours, given as #hex) and named ports. Add them with add_copy; change one copy's fill-ins, parts' text or parts' style with update_copy; attach edges to a port with "copyId.port". A copy's parts can't be moved on their own; detach the copy first if the user wants to rearrange it. Prefer a template from the catalog when the user asks for something it already draws.
 - You can see images the user attaches. Use them as reference for what to draw; put one on the board with add_image only when the user asks for the image itself.
 - For a request that asks a question instead of a change, or is too unclear to act on, call reply.`
 
@@ -66,7 +68,7 @@ function neighbourhood(board: Board, ids: Set<Id>): Set<Id> {
         out.add(el.id)
         ends.forEach((e) => out.add(e))
       }
-    } else if (el.kind === 'group' && el.members.some((m) => ids.has(m))) {
+    } else if ((el.kind === 'group' || el.kind === 'frame') && el.members.some((m) => ids.has(m))) {
       out.add(el.id)
     } else if ('at' in el && el.at && 'kind' in el.at && el.at.kind === 'rel' && (ids.has(el.id) || ids.has(el.at.of))) {
       out.add(el.id)
@@ -88,7 +90,16 @@ export function templateCatalog(board: Board, templates: TemplateVersion[]): str
   if (byName.size === 0) return ''
   const lines = [...byName].map(([name, def]) => {
     const spec = def.template!
-    const params = spec.params.map((p) => `${p.name}${p.default ? ` (default "${p.default}")` : ''}`).join(', ')
+    // Colour fill-ins say which part and colour they change, so the model knows to pass a colour.
+    const colourOf = (name: string) =>
+      def.elements.flatMap((e) => STYLE_PARAM_KEYS.filter((k) => styleParam(e.style[k]) === name).map((k) => `${k === 'fill' ? 'fill' : 'outline'} of ${e.id}`))
+    const params = spec.params
+      .map((p) => {
+        const colour = colourOf(p.name)
+        const about = [...(colour.length ? [`a colour: ${colour.join(', ')}`] : []), ...(p.default ? [`default "${p.default}"`] : [])]
+        return `${p.name}${about.length ? ` (${about.join('; ')})` : ''}`
+      })
+      .join(', ')
     const parts = def.elements
       .filter((e) => e.kind !== 'group')
       .map((e) => `${e.id} (${e.kind}${e.kind === 'node' && e.label ? ` "${e.label}"` : e.kind === 'text' ? ` "${e.text}"` : ''})`)

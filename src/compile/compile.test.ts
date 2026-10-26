@@ -101,7 +101,7 @@ describe('diffScene', () => {
   it('picks up restyles, resizes and label edits', () => {
     const { ops, again } = editScene(board, (s) => {
       Object.assign(byId(s, 'api'), { strokeColor: '#c00', roundness: null })
-      byId(s, 'api~label').text = 'Gateway'
+      Object.assign(byId(s, 'api~label'), { text: 'Gateway', originalText: 'Gateway' })
       byId(s, 'api~label').fontSize = 28
       byId(s, 'q').width = 300
     })
@@ -301,6 +301,22 @@ group g1 [api, db]
     expect(rim).toMatchObject({ type: 'ellipse', backgroundColor: 'transparent', x: 0, y: 200, width: 160 })
     expect(byId(scene, 'e1').endBinding?.elementId).toBe('db')
     expect(byId(scene, 'db~label')).toMatchObject({ containerId: 'db' })
+    // The label's container is the band between the rims, and the label sits inside it.
+    const label = byId(scene, 'db~label')
+    expect(node.y).toBeGreaterThanOrEqual(rim.y + rim.height)
+    expect(node.y + node.height).toBeLessThan(200 + 120)
+    expect(label.y).toBeGreaterThanOrEqual(node.y)
+    expect(label.y + label.height).toBeLessThanOrEqual(node.y + node.height)
+  })
+
+  it('records a resize of the whole cylinder from its outline', () => {
+    const { ops, again } = editScene(cyl, (s) => {
+      const body = byId(s, 'db~body')
+      body.width = 200
+      body.height = 150
+    })
+    expect(ops).toContainEqual({ op: 'update', id: 'db', set: { size: { w: 200, h: 150 } } })
+    expect(again).toEqual([])
   })
 
   it('records a move of the whole cylinder and a recolour of its outline, and nothing else', () => {
@@ -318,5 +334,87 @@ group g1 [api, db]
       for (const e of s) if (e.groupIds.includes('db')) e.isDeleted = true
     })
     expect(ops).toContainEqual({ op: 'remove', id: 'db' })
+  })
+})
+
+describe('frames', () => {
+  const framed = parseBoard(`board "f" v1
+node api "API" rect at(0,0) size(160,60)
+node db "Orders" cylinder at(0,200) size(160,120)
+text t1 "outside" at(400,0)
+frame f1 "Backend" [api, db]
+`)
+
+  it('round-trips through the text format, with and without a box', () => {
+    expect(parseBoard(printBoard(framed))).toEqual(framed)
+    const boxed = parseBoard('board "f" v1\nnode a "A" rect at(0,0)\nframe f "Area" [a] at(-50,-50) size(400,300)\n')
+    expect(printBoard(boxed)).toContain('frame f "Area" [a] at(-50,-50) size(400,300)')
+    expect(() => parseBoard('board "f" v1\nframe f "Area" [] at(0,0)\n')).toThrow(/both at\(x,y\) and size\(w,h\)/)
+  })
+
+  it('wraps its members, comes first, and its members and their parts point at it', () => {
+    const scene = compileBoard(framed).elements
+    expect(scene[0]).toMatchObject({ id: 'f1', type: 'frame', name: 'Backend', x: -40, y: -40, width: 240, height: 400 })
+    for (const id of ['api', 'api~label', 'db', 'db~body', 'db~rim', 'db~label']) expect(byId(scene, id).frameId).toBe('f1')
+    expect(byId(scene, 't1').frameId).toBeNull()
+  })
+
+  it('records what is dropped into or out of a frame, and a frame moved by hand', () => {
+    const { ops, again } = editScene(framed, (s) => {
+      byId(s, 't1').frameId = 'f1'
+      byId(s, 'api').frameId = null
+      byId(s, 'api~label').frameId = null
+      const f = byId(s, 'f1')
+      f.x += 10
+    })
+    expect(ops).toContainEqual({ op: 'update', id: 'f1', set: { at: { x: -30, y: -40 }, size: { w: 240, h: 400 } } })
+    expect(ops).toContainEqual({ op: 'update', id: 'f1', set: { members: ['db', 't1'] } })
+    expect(again).toEqual([])
+  })
+
+  it('adopts a frame drawn by hand around existing elements', () => {
+    const { ops, next } = editScene(framed, (s) => {
+      byId(s, 't1').frameId = 'Fr9'
+      return [drawn({ id: 'Fr9', type: 'frame', x: 380, y: -20, width: 200, height: 100, name: 'Notes' }), ...s]
+    })
+    expect(ops[0]).toEqual({ op: 'add', element: expect.objectContaining({ kind: 'frame', id: 'Fr9', label: 'Notes', members: ['t1'], at: { x: 380, y: -20 } }) })
+    expect(next.elements.find((e) => e.id === 'Fr9')).toMatchObject({ members: ['t1'] })
+  })
+
+  it('drops a removed member and refuses frames in frames', () => {
+    const removed = commit(framed, [{ op: 'remove', id: 'api' }]).board
+    expect(removed.elements.find((e) => e.id === 'f1')).toMatchObject({ members: ['db'] })
+    expect(() => commit(framed, [{ op: 'add', element: { kind: 'frame', id: 'f2', label: '', members: ['f1'], style: {}, hints: {} } }])).toThrow()
+  })
+})
+
+describe('labels that wrap', () => {
+  const long = parseBoard(`board "w" v1
+node r "Customer orders and payments archive" rect at(0,0) size(160,100)
+node c "Customer orders and payments archive" cylinder at(300,0) size(160,160)
+node e "Customer orders and payments archive" ellipse at(600,0) size(160,100)
+`)
+
+  it('wraps inside rectangles and a cylinder’s middle, and keeps what was typed as the label', () => {
+    const scene = compileBoard(long).elements
+    for (const id of ['r', 'c']) {
+      const label = byId(scene, `${id}~label`)
+      expect(label.text).toContain('\n')
+      expect(label.originalText).toBe('Customer orders and payments archive')
+      expect(label.width).toBeLessThanOrEqual(byId(scene, id).width)
+    }
+    expect(byId(scene, 'e~label').text).not.toContain('\n')
+    // Excalidraw wrapping a label differently is not an edit.
+    const { ops } = editScene(long, (s) => {
+      byId(s, 'r~label').text = 'Customer orders\nand payments\narchive'
+    })
+    expect(ops).toEqual([])
+  })
+
+  it('makes a node with a very long label taller instead of wider than the maximum', () => {
+    const board = parseBoard(`board "w" v1\nnode r "${'word '.repeat(40).trim()}" rect at(0,0)\n`)
+    const box = compileBoard(board).boxes.get('r')!
+    expect(box.w).toBeLessThanOrEqual(480)
+    expect(box.h).toBeGreaterThan(100)
   })
 })

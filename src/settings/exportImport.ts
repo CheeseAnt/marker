@@ -112,6 +112,7 @@ const LABELS: [string, string][] = [
   ['shortcuts.focusPrompt', 'Jump to the prompt bar'],
   ['shortcuts.pushToTalk', 'Hold to talk'],
   ['jobConcurrency', 'Requests at once'],
+  ['theme', 'Theme'],
   ['budget.warnAt', 'Monthly warning ($)'],
   ['budget.limit', 'Monthly limit ($)'],
 ]

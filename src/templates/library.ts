@@ -2,7 +2,7 @@ import { get, set } from 'idb-keyval'
 import { create } from 'zustand'
 import { parseBoard } from '../dsl/parse'
 import { printBoard } from '../dsl/print'
-import type { Board } from '../model/types'
+import { parseTemplateKey, type Board, type InstanceElement } from '../model/types'
 import type { TemplateVersion } from './operations'
 
 const LIBRARY_KEY = 'marker.templates.v1'
@@ -47,6 +47,17 @@ function boardOf(v: StoredVersion): Board {
 export function latestVersion(entry: LibraryEntry): TemplateVersion {
   const v = entry.versions.at(-1)!
   return { name: entry.name, version: v.version, board: boardOf(v) }
+}
+
+/** Copies on the board whose template has a newer version in the library, with that version. */
+export function outdatedCopies(board: Board, entries: Record<string, LibraryEntry>): { copy: InstanceElement; latest: TemplateVersion }[] {
+  return board.elements.flatMap((e) => {
+    if (e.kind !== 'instance') return []
+    const { name, version } = parseTemplateKey(e.template)
+    const entry = entries[name]
+    const latest = entry && latestVersion(entry)
+    return latest && version < latest.version ? [{ copy: e, latest }] : []
+  })
 }
 
 export function versionOf(entry: LibraryEntry, version: number): TemplateVersion | undefined {

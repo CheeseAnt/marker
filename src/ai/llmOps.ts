@@ -125,6 +125,14 @@ export const llmOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('remove'), id: idSchema.describe('Removing a node also removes its edges.') }),
   z.object({ op: z.literal('group'), id: idSchema, members: z.array(idSchema).min(1), label: z.string().optional() }),
   z.object({ op: z.literal('ungroup'), id: idSchema.describe('The group to dissolve; its members stay.') }),
+  z
+    .object({
+      op: z.literal('frame'),
+      id: idSchema,
+      label: z.string().describe('The name shown on the frame.'),
+      members: z.array(idSchema).describe('Elements inside the frame; it is drawn around them. Use the same op with the same id to change them.'),
+    })
+    .describe('A named area around related elements, such as "Backend" or "Phase 2".'),
   z.object({ op: z.literal('reorder'), id: idSchema, to: z.enum(['front', 'back']) }),
   z.object({ op: z.literal('set_board_font'), font: z.enum(FONT_IDS).describe('The font for every element without its own font.') }),
 ])
@@ -379,6 +387,18 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
         known.set(o.id, 'group')
         ops.push({ op: 'add', element: { ...empty, kind: 'group', id: o.id, members: o.members, ...(o.label && { label: o.label }) } })
         break
+      case 'frame': {
+        const kind = known.get(o.id)
+        if (kind && kind !== 'frame') {
+          issues.push(`${at}: "${o.id}" is already a ${kind}`)
+          break
+        }
+        if (kind) ops.push({ op: 'update', id: o.id, set: { label: o.label, members: o.members } })
+        else ops.push({ op: 'add', element: { ...empty, kind: 'frame', id: o.id, label: o.label, members: o.members } })
+        used.add(o.id)
+        known.set(o.id, 'frame')
+        break
+      }
       case 'ungroup':
         if (known.get(o.id) !== 'group') issues.push(`${at}: "${o.id}" is not a group`)
         else {

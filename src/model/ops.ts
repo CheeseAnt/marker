@@ -9,7 +9,8 @@ import { definitionSchema, elementSchema, idSchema, styleSchema, templateKeySche
  * `replace` swaps an element for another with the same id (even of another kind) without
  * the cascades a remove would trigger. `board` changes the title or default style.
  * `define` embeds (or replaces) a template version; definitions no instance uses are removed
- * at the end of every commit, so `undefine` mostly appears in inverses.
+ * at the end of every commit, so `undefine` mostly appears in inverses. `rename` gives an
+ * element a new id and updates everything that refers to it.
  */
 export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add'), element: elementSchema, after: idSchema.nullable().optional() }),
@@ -20,6 +21,7 @@ export const opSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('board'), set: z.object({ title: z.string(), defaults: styleSchema }).partial() }),
   z.object({ op: z.literal('define'), key: templateKeySchema, board: definitionSchema }),
   z.object({ op: z.literal('undefine'), key: templateKeySchema }),
+  z.object({ op: z.literal('rename'), from: idSchema, to: idSchema }),
 ])
 export type Op = z.infer<typeof opSchema>
 

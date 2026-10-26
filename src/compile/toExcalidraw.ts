@@ -1,5 +1,5 @@
-import { center, DEFAULT_FONT_SIZE, effectiveStyle, instanceLayout, measureText, resolveBoxes, type Box } from '../model/geometry'
-import { childId } from '../templates/expand'
+import { center, DEFAULT_FONT_SIZE, effectiveStyle, instanceLayout, measureText, resolveBoxes, wrapText, type Box } from '../model/geometry'
+import { childId, withStyleDefaults } from '../templates/expand'
 import { fontPreset } from '../model/fonts'
 import { hashString } from '../model/hash'
 import { parsePath } from '../model/path'
@@ -11,11 +11,16 @@ import {
   DEFAULT_FILL,
   DEFAULT_STROKE,
   FILL_STYLE,
+  LABEL_SUFFIX,
   labelId,
+  partOwner,
   ROUNDNESS,
   STICKY_FILL,
   type ExElement,
 } from './exTypes'
+
+/** Space kept between a label and the sides of its shape. */
+const LABEL_INSET = 10
 
 /** Stable 31-bit hash so an element keeps the same hand-drawn wobble across compiles. */
 export function seedFor(id: string): number {
@@ -69,18 +74,20 @@ function textElement(
   style: Style,
   hints: Hints,
   groupIds: string[],
-  container: { id: string; center: Point } | null,
+  container: { id: string; center: Point; width?: number } | null,
   seedSource: BoardElement,
 ): ExElement {
   const fontSize = style.fontSize ?? DEFAULT_FONT_SIZE
-  const size = measureText(text, fontSize, style.font)
+  // Labels inside a shape wrap to its width, as Excalidraw does when one is typed there.
+  const shown = container?.width ? wrapText(text, fontSize, style.font, container.width - LABEL_INSET * 2) : text
+  const size = measureText(shown, fontSize, style.font)
   const pos = container ? { x: container.center.x - size.w / 2, y: container.center.y - size.h / 2 } : at
   const el = base({ ...seedSource, id, hints: container ? {} : hints }, 'text', { ...pos, ...size }, style, groupIds)
   return {
     ...el,
     // Labels take colour and font from their owner but are never filled.
     backgroundColor: DEFAULT_FILL,
-    text,
+    text: shown,
     originalText: text,
     fontSize,
     fontFamily: fontFamily(style, hints),
@@ -124,7 +131,17 @@ function outlineOf(el: BoardElement | undefined): Outline {
 
 /** Height of a cylinder's top (and bottom) ellipse. */
 export function cylinderRim(box: Box): number {
-  return Math.round(Math.max(8, Math.min(box.h / 6, box.w / 4)))
+  // Capped, so a taller cylinder gets more room for its label rather than a deeper rim.
+  return Math.round(Math.max(8, Math.min(box.h / 6, box.w / 4, CYLINDER_RIM_MAX)))
+}
+
+/** Half the height of a cylinder's rim at most; default sizes leave the label room below it. */
+const CYLINDER_RIM_MAX = 16
+
+/** The body of a cylinder between the front of its top rim and the middle of its bottom curve. */
+export function cylinderBand(box: Box): Box {
+  const ry = cylinderRim(box)
+  return { x: box.x, y: box.y + ry * 2, w: box.w, h: Math.max(1, box.h - ry * 3) }
 }
 
 /** Points of a half ellipse across the width of `box` at height `cy`, left to right. */
@@ -188,7 +205,9 @@ function groupChains(board: Board): Map<Id, string[]> {
 }
 
 /** Compiles a board to Excalidraw elements in z-order. Deterministic for a given board. */
-export function compileBoard(board: Board, depth = 0): Compiled {
+export function compileBoard(template: Board, depth = 0): Compiled {
+  // A template board shows the colours a fresh copy would have.
+  const board = withStyleDefaults(template)
   const boxes = resolveBoxes(board, depth)
   const chains = groupChains(board)
   const byId = new Map(board.elements.map((e) => [e.id, e]))
@@ -201,6 +220,7 @@ export function compileBoard(board: Board, depth = 0): Compiled {
     if (box) copies.set(el.id, compileCopy(board, el, box, depth))
   }
   const out: ExElement[] = []
+  const frames: ExElement[] = []
   const bound = new Map<Id, { id: string; type: 'arrow' | 'text' }[]>()
   const bind = (owner: Id, ref: { id: string; type: 'arrow' | 'text' }) => {
     const list = bound.get(owner) ?? []
@@ -269,12 +289,13 @@ export function compileBoard(board: Board, depth = 0): Compiled {
         if (el.shape === 'cylinder') {
           // The node's own element only carries bindings and the label; the parts draw it.
           const group = [el.id, ...groupIds]
-          out.push({ ...base(el, 'rectangle', box, { ...style, stroke: DEFAULT_FILL, fill: DEFAULT_FILL }, group), roundness: null })
+          // Excalidraw keeps a label just above its container, so the outline goes underneath both.
           out.push(...cylinderParts(el, box, style, group))
+          // The container covers the band between the rims, so the label centres and wraps there.
+          const band = cylinderBand(box)
+          out.push({ ...base(el, 'rectangle', band, { ...style, stroke: DEFAULT_FILL, fill: DEFAULT_FILL }, group), roundness: null })
           if (el.label) {
-            const ry = cylinderRim(box)
-            const middle = { x: box.x + box.w / 2, y: box.y + ry + (box.h - ry) / 2 }
-            out.push(textElement(labelId(el.id), el.label, box, style, el.hints, group, { id: el.id, center: middle }, el))
+            out.push(textElement(labelId(el.id), el.label, band, style, el.hints, group, { id: el.id, center: center(band), width: band.w }, el))
             bind(el.id, { id: labelId(el.id), type: 'text' })
           }
           break
@@ -288,7 +309,9 @@ export function compileBoard(board: Board, depth = 0): Compiled {
             : { type: el.shape === 'diamond' ? ROUNDNESS.proportional : ROUNDNESS.adaptive }
         out.push({ ...base(el, type, box, shapeStyle, groupIds), roundness })
         if (el.label) {
-          out.push(textElement(labelId(el.id), el.label, box, style, el.hints, groupIds, { id: el.id, center: center(box) }, el))
+          // Boxy shapes wrap their label to their width; round ones keep it on the lines given.
+          const width = el.shape === 'rect' || el.shape === 'sticky' ? box.w : undefined
+          out.push(textElement(labelId(el.id), el.label, box, style, el.hints, groupIds, { id: el.id, center: center(box), width }, el))
           bind(el.id, { id: labelId(el.id), type: 'text' })
         }
         break
@@ -330,10 +353,25 @@ export function compileBoard(board: Board, depth = 0): Compiled {
         if (copy) out.push(...copy.elements.map((e) => ({ ...e, groupIds: [...e.groupIds, ...groupIds] })))
         break
       }
+      case 'frame':
+        if (box) frames.push({ ...base(el, 'frame', box, { ...style, fill: DEFAULT_FILL }, []), name: el.label || null })
+        break
       case 'group':
         break
     }
   }
+
+  // Frames go first, under everything, and their members (with labels and parts) point at them.
+  const frameOf = new Map<string, string>()
+  for (const el of board.elements) if (el.kind === 'frame') for (const m of el.members) frameOf.set(m, el.id)
+  if (frameOf.size) {
+    for (const e of out) {
+      const owner = e.id.endsWith(LABEL_SUFFIX) ? e.id.slice(0, -LABEL_SUFFIX.length) : (partOwner(e.id) ?? e.id.split('/')[0])
+      const frame = frameOf.get(owner)
+      if (frame) e.frameId = frame
+    }
+  }
+  out.unshift(...frames)
 
   for (const el of out) {
     const refs = bound.get(el.id)
@@ -380,6 +418,7 @@ function compileCopy(board: Board, el: InstanceElement, box: Box, depth: number)
     if (e.points) next.points = e.points.map(([x, y]) => [x * scale, y * scale] as const)
     if (e.fontSize) next.fontSize = e.fontSize * scale
     if (e.containerId) next.containerId = id(e.containerId)
+    if (e.frameId) next.frameId = id(e.frameId)
     if (e.startBinding !== undefined) next.startBinding = rebind(e.startBinding)
     if (e.endBinding !== undefined) next.endBinding = rebind(e.endBinding)
     return next

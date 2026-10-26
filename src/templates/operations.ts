@@ -1,3 +1,4 @@
+import { DEFAULT_STROKE, STICKY_FILL } from '../compile/exTypes'
 import { resolveBoxes, unionBoxes, type Box } from '../model/geometry'
 import type { Op } from '../model/ops'
 import { parsePath, pointsToPath } from '../model/path'
@@ -64,11 +65,12 @@ export interface UpdateReport {
   dropped: string[]
 }
 
-/** Moves every copy of `t.name` on the board to version `t.version`. */
-export function updateCopiesOps(board: Board, t: TemplateVersion): UpdateReport {
+/** Moves every copy of `t.name` on the board (or just those in `ids`) to version `t.version`. */
+export function updateCopiesOps(board: Board, t: TemplateVersion, ids?: Id[]): UpdateReport {
   const key = templateKey(t.name, t.version)
   const copies = board.elements.filter(
-    (e): e is InstanceElement => e.kind === 'instance' && e.template.startsWith(`${t.name}@`) && e.template !== key,
+    (e): e is InstanceElement =>
+      e.kind === 'instance' && e.template.startsWith(`${t.name}@`) && e.template !== key && (!ids || ids.includes(e.id)),
   )
   const ops = definitionOps(board, t)
   const spec = t.board.template!
@@ -91,7 +93,14 @@ export interface TemplateDraft {
   description: string
   /** Text elements (by board id) whose text becomes a parameter. */
   params: { element: Id; name: string }[]
+  /** Colours (an element's fill or stroke) each copy can change, as params. */
+  colours?: { element: Id; key: 'fill' | 'stroke'; name: string }[]
   ports: { element: Id; name: string; side: PortSide }[]
+}
+
+/** The colour an element shows for `key`, from its own style or the board's. */
+export function colourOf(board: Board, el: BoardElement, key: 'fill' | 'stroke'): string {
+  return el.style[key] ?? board.defaults[key] ?? (key === 'stroke' ? DEFAULT_STROKE : el.kind === 'node' && el.shape === 'sticky' ? STICKY_FILL : 'transparent')
 }
 
 /** The selected elements plus what belongs with them: edges between them and their groups. */
@@ -154,6 +163,7 @@ export function templateFromSelection(board: Board, ids: Id[], draft: TemplateDr
       if (next.kind === 'node' || next.kind === 'edge') next = { ...next, label: `{${param}}` }
       else if (next.kind === 'text') next = { ...next, text: `{${param}}` }
     }
+    for (const c of draft.colours ?? []) if (c.element === el.id) next = { ...next, style: { ...next.style, [c.key]: `{${c.name}}` } }
     return next
   })
 
@@ -170,7 +180,10 @@ export function templateFromSelection(board: Board, ids: Id[], draft: TemplateDr
     template: {
       name: draft.name,
       description: draft.description,
-      params: draft.params.map((p) => ({ name: p.name, default: textOf(board.elements.find((e) => e.id === p.element)!) ?? '' })),
+      params: [
+        ...draft.params.map((p) => ({ name: p.name, default: textOf(board.elements.find((e) => e.id === p.element)!) ?? '' })),
+        ...(draft.colours ?? []).map((c) => ({ name: c.name, default: colourOf(board, board.elements.find((e) => e.id === c.element)!, c.key) })),
+      ],
       ports: draft.ports.map((p) => ({ name: p.name, target: p.element, side: p.side })),
     },
     definitions,

@@ -62,6 +62,14 @@ export function detachOps(board: Board, instanceId: Id, opts: DetachOptions): Op
       }
       case 'group':
         return { ...el, id, members: el.members.map(map) }
+      case 'frame':
+        return {
+          ...el,
+          id,
+          members: el.members.map(map),
+          ...(el.at && { at: pt(el.at) }),
+          ...(el.size && { size: { w: round(el.size.w * scale), h: round(el.size.h * scale) } }),
+        }
     }
   })
 
@@ -76,7 +84,7 @@ export function detachOps(board: Board, instanceId: Id, opts: DetachOptions): Op
       if (!('id' in e) || e.id !== inst.id) return undefined
       const target = e.port ? ports.get(e.port) : undefined
       // An edge to the copy itself goes to its first top-level part.
-      return { id: map(target ?? content.elements.find((c) => c.kind !== 'edge' && c.kind !== 'group')?.id ?? inst.id) }
+      return { id: map(target ?? content.elements.find((c) => c.kind !== 'edge' && c.kind !== 'group' && c.kind !== 'frame')?.id ?? inst.id) }
     }
     const from = retarget(el.from)
     const to = retarget(el.to)
@@ -85,7 +93,7 @@ export function detachOps(board: Board, instanceId: Id, opts: DetachOptions): Op
   ops.push({ op: 'remove', id: inst.id })
   if (opts.keepGrouped) {
     const nested = new Set(content.elements.flatMap((e) => (e.kind === 'group' ? e.members : [])))
-    const members = content.elements.filter((e) => !nested.has(e.id)).map((e) => map(e.id))
+    const members = content.elements.filter((e) => !nested.has(e.id) && e.kind !== 'frame').map((e) => map(e.id))
     ops.push({ op: 'add', element: { kind: 'group', id: inst.id, members, style: {}, hints: {} } })
   }
   return ops

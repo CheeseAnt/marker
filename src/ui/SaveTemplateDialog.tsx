@@ -5,7 +5,7 @@ import { useBoard } from '../state/board'
 import { highlightAfterRender } from '../state/canvasBridge'
 import { useToast } from '../state/toast'
 import { useLibrary } from '../templates/library'
-import { expandSelection, replaceWithCopyOps, templateFromSelection, toIdentifier } from '../templates/operations'
+import { colourOf, expandSelection, replaceWithCopyOps, templateFromSelection, toIdentifier } from '../templates/operations'
 
 interface Props {
   open: boolean
@@ -25,6 +25,14 @@ interface Choice {
   name: string
 }
 
+interface ColourChoice {
+  element: Id
+  text: string
+  on: boolean
+  name: string
+  key: 'fill' | 'stroke'
+}
+
 interface PortChoice {
   element: Id
   text: string
@@ -41,6 +49,7 @@ export function SaveTemplateDialog({ open, selection, onClose }: Props) {
   const [description, setDescription] = useState('')
   const [params, setParams] = useState<Choice[]>([])
   const [ports, setPorts] = useState<PortChoice[]>([])
+  const [colours, setColours] = useState<ColourChoice[]>([])
   const [replace, setReplace] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const ids = { name: useId(), description: useId(), nameHint: useId() }
@@ -59,6 +68,12 @@ export function SaveTemplateDialog({ open, selection, onClose }: Props) {
       setReplace(true)
       // The first labelled shape is the obvious thing for each copy to rename.
       setParams(texts.map((e, i) => ({ element: e.id, text: textOf(e)!, on: i === 0, name: i === 0 ? 'name' : toIdentifier(textOf(e)!, `text${i + 1}`) })))
+      // Off by default: most templates keep their colours, and a copy can still be recoloured by hand.
+      setColours(
+        elements
+          .filter((e) => e.kind === 'node')
+          .map((e, i) => ({ element: e.id, text: textOf(e) || e.id, on: false, name: i === 0 ? 'color' : `${toIdentifier(textOf(e) || e.id, e.id)}_color`, key: 'fill' })),
+      )
       setPorts(
         elements
           .filter((e) => e.kind === 'node')
@@ -77,7 +92,8 @@ export function SaveTemplateDialog({ open, selection, onClose }: Props) {
   const save = () => {
     if (!identifier) return setError('Give the template a name.')
     const chosen = params.filter((p) => p.on)
-    const paramNames = chosen.map((p) => p.name)
+    const chosenColours = colours.filter((c) => c.on)
+    const paramNames = [...chosen, ...chosenColours].map((p) => p.name)
     if (paramNames.some((n) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))) return setError('Fill-in names use letters, digits and underscores, like name or ip_address.')
     if (new Set(paramNames).size !== paramNames.length) return setError('Each fill-in needs its own name.')
     const portNames = ports.filter((p) => p.on).map((p) => p.name)
@@ -90,6 +106,7 @@ export function SaveTemplateDialog({ open, selection, onClose }: Props) {
       title: name.trim(),
       description: description.trim(),
       params: chosen.map((p) => ({ element: p.element, name: p.name })),
+      colours: chosenColours.map((c) => ({ element: c.element, key: c.key, name: c.name })),
       ports: ports.filter((p) => p.on).map((p) => ({ element: p.element, name: p.name, side: p.side })),
     }
     try {
@@ -156,6 +173,44 @@ export function SaveTemplateDialog({ open, selection, onClose }: Props) {
                   )}
                 </div>
               ))}
+            </fieldset>
+          )}
+
+          {colours.length > 0 && (
+            <fieldset className="choice-list">
+              <legend>Colours each copy can change</legend>
+              {colours.map((c, i) => {
+                const board = useBoard.getState().board
+                const el = board.elements.find((e) => e.id === c.element)
+                const current = el ? colourOf(board, el, c.key) : 'transparent'
+                return (
+                  <div key={c.element} className="choice-row">
+                    <label className="choice-check">
+                      <input type="checkbox" checked={c.on} onChange={(e) => setColours(colours.map((q, j) => (j === i ? { ...q, on: e.target.checked } : q)))} />
+                      <span className="colour-swatch" style={{ background: current }} aria-hidden="true" />
+                      <span className="choice-text">{c.text}</span>
+                    </label>
+                    {c.on && (
+                      <>
+                        <select
+                          aria-label={`Which colour of “${c.text}”`}
+                          value={c.key}
+                          onChange={(e) => setColours(colours.map((q, j) => (j === i ? { ...q, key: e.target.value as ColourChoice['key'] } : q)))}
+                        >
+                          <option value="fill">fill</option>
+                          <option value="stroke">outline</option>
+                        </select>
+                        <input
+                          aria-label={`Name for the colour of “${c.text}”`}
+                          className="choice-name"
+                          value={c.name}
+                          onChange={(e) => setColours(colours.map((q, j) => (j === i ? { ...q, name: e.target.value } : q)))}
+                        />
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </fieldset>
           )}
 
