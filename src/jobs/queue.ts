@@ -4,7 +4,8 @@ import { createProvider } from '../ai/providers'
 import type { Attachment } from '../ai/prompt'
 import { loadAsset } from '../assets/store'
 import { latestVersion, useLibrary } from '../templates/library'
-import { formatRecent, recentContext, type RecentTurn } from '../ai/recent'
+import { formatRecent, RECENT_CHANGES, recentContext, type RecentTurn } from '../ai/recent'
+import type { Transaction } from '../history/history'
 import { ProviderError, type Usage } from '../ai/providers/types'
 import { OpError } from '../model/apply'
 import type { Id } from '../model/types'
@@ -28,6 +29,11 @@ export interface Job {
   attachments: AttachmentRef[]
   /** What the user was looking at when they asked; new things go there. */
   viewport?: Viewport
+  /**
+   * The newest changes when the request was sent, oldest first. The model reads them as
+   * "Recent changes", so "undo that" means these, even if another request lands meanwhile.
+   */
+  changesAtSend: Transaction[]
   stage: JobStage
   createdAt: number
   startedAt?: number
@@ -126,8 +132,9 @@ export const useJobs = create<QueueState>((set, get) => {
         provider,
         getBoard: () => useBoard.getState().board,
         getHistory: () => useBoard.getState().history,
+        undoBase: job.changesAtSend.map((t) => t.id).reverse(),
         selection: job.selection,
-        recent: formatRecent(recentContext(useBoard.getState().history, recentTurns(get().jobs))),
+        recent: formatRecent(recentContext({ past: job.changesAtSend, future: [] }, recentTurns(get().jobs))),
         templates: Object.values(useLibrary.getState().entries).map(latestVersion),
         signal: controller.signal,
         onStage: (stage, { outputTokens, repair }) => patch(job.id, { stage, outputTokens, repair }),
@@ -189,6 +196,7 @@ export const useJobs = create<QueueState>((set, get) => {
         attachments: opts.attachments ?? [],
         ...(opts.viewport && { viewport: opts.viewport }),
         ...(opts.overBudgetOk && { overBudgetOk: true }),
+        changesAtSend: useBoard.getState().history.past.slice(-RECENT_CHANGES),
         stage: 'queued',
         createdAt: Date.now(),
         outputTokens: 0,
