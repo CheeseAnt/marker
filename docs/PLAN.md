@@ -513,7 +513,40 @@ recording → transcribing → queued → building context → calling model →
   - status bar shows download %, stage changes and token counts with a slow mocked streaming provider.
 - **Manual:** the real Azure Foundry key in the deployed static site (confirms CORS end-to-end, and that usage arrives on the final stream chunk), mic on Chrome, Edge and Safari, each on-device model on a WebGPU machine and on a machine without WebGPU.
 
-## Questions still open (can be answered after the spikes)
-- File extension and name (`.board` / `.boardz`?), and whether the history section is saved by default.
-- Hosting target (this affects COOP/COEP headers and whether an optional proxy is easy to add).
-- Default prices to ship for your Azure region and deployment type.
+## Deferred work and open questions
+
+Everything put off along the way, in one place. Each item says where it came from and roughly what it involves.
+
+### Model quality
+- **Record and run the evals** (phase 5, 10). `npm run eval:live` against `gpt-5.6-luna` records answers for the 31 cases in `evals/cases.ts`; only one hand-written example is recorded so far. The failures should drive changes to the system prompt and op descriptions.
+- **Arrow labels on short arrows** (phase 5). When connected nodes are close, a label such as "queries" covers most of the arrow. Layout (`placeUnplaced`, and relative-placement gaps) should leave more room when an edge has a label.
+- **`undo_first` with requests running at once** (phase 8). With two requests in flight, "undo that" is validated against whatever is newest when the answer is checked, which may be the other request's change. Consider tying `undo_first` to the history at the time the request was sent and failing safely if it moved.
+
+### Board model and canvas
+- **Shapes not yet modelled** (phase 2): `cylinder` (a composite database shape) and Excalidraw `frame`s. Frames drawn on the canvas are currently ignored.
+- **Live relative placement** (phase 5 review). A node placed `below(api)` follows `api` when it moves, until the node is dragged itself. This is by design, but it can surprise people. Options are to pin on first render, or to keep it live and show the link while dragging. Not decided.
+- **Ids of hand-drawn elements** (phase 2). Shapes drawn on the canvas keep Excalidraw's long random ids, which make the board text harder to read and cost the model tokens. They could be renamed to short ids when the canvas is idle.
+- **Dark theme.** The interface is light only, and Excalidraw's theme toggle is left out of the menu. A dark palette would need its own validated colours, including the usage chart's.
+
+### Templates
+- **"Update available" badge on the canvas** (phase 5b). Outdated copies are only shown in the Templates tab.
+- **Editing a template in place** (phase 5b). Today you detach a copy, edit it, and save it again under the same name.
+- **Style params** (phase 5b). Params only fill text (`{name}`). Per-copy colours use overrides; `fill={color}`-style params would need DSL syntax.
+
+### Images and files
+- **Cleaning up unused images** (phase 6). Image assets in IndexedDB are never deleted. They could be garbage-collected when no board, history entry or template refers to them.
+- **Choosing `.boardz` without the file picker** (phase 10). In browsers without the File System Access API, Save as always downloads `.board`.
+
+### Voice
+- **Vocabulary hints for Whisper** (phase 7). Pass the board's labels as an initial prompt so names on the board are transcribed correctly.
+- **Private browser speech** (phase 7). Use Chrome's on-device `processLocally` for the "browser" voice mode where available.
+
+### Performance and platform
+- **Precache size** (phase 10). The service worker precaches about 10.5 MB, mostly Excalidraw's diagram-import chunks (Mermaid and similar). They could be cached on first use instead.
+- **Browsers other than Chromium.** All automated tests run in Chromium. Safari and Firefox (microphone, file pickers, service worker, cross-origin isolation) haven't been checked.
+- **More providers** (§4). OpenAI, Anthropic, Gemini and local models fit behind the provider interface; only Azure AI Foundry is built.
+
+### Answered or still open from the original plan
+- **File extension and history (answered):** `.board` (text) and `.boardz` (zip); undo history is saved in files by default.
+- **Hosting (open):** any static host works. The service worker supplies the isolation headers where the host can't, so the choice only affects how the first visit loads.
+- **Default prices (open):** the defaults are list prices for known model families. `gpt-5.6-luna` has none, so its price has to be entered in Settings → Costs.
