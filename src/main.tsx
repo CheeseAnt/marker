@@ -5,10 +5,14 @@ import '@fontsource/atkinson-hyperlegible/latin-400.css'
 import '@fontsource/atkinson-hyperlegible/latin-700.css'
 import './index.css'
 import App from './ui/App.tsx'
+import { registerServiceWorker } from './pwa'
 import { useBoard } from './state/board'
 import { useJobs } from './jobs/queue'
 import { useVoice } from './speech/voice'
 import { useUsage } from './usage/ledger'
+
+// Works offline once loaded (production builds only).
+if (import.meta.env.PROD) void registerServiceWorker()
 
 // Lets end-to-end tests read the board without poking at canvas pixels.
 if (import.meta.env.DEV) Object.assign(window, { __boardbot: { useBoard, useJobs, useVoice, useUsage } })

@@ -3,6 +3,7 @@ import { createReadStream, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // Cross-origin isolation enables multi-threaded WASM for on-device speech models.
 const isolationHeaders = {
@@ -100,7 +101,42 @@ function contentSecurityPolicy(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), ortRuntime(), contentSecurityPolicy(), excalidrawFontFallback()],
+  plugins: [
+    react(),
+    ortRuntime(),
+    contentSecurityPolicy(),
+    excalidrawFontFallback(),
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      // Registered in src/pwa.ts, which also handles isolation and updates.
+      injectRegister: false,
+      injectManifest: {
+        // A classic script at /sw.js, registered in src/pwa.ts.
+        rollupFormat: 'iife',
+        // The app shell and the board fonts (under 0.6 MB together). The CJK fallback font
+        // (16 MB) and the speech runtime (27 MB) are cached when first used instead.
+        globPatterns: ['**/*.{js,mjs,css,html,png,svg,woff2,webmanifest}'],
+        globIgnores: ['fonts/Xiaolai/**', '**/*.wasm'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+      manifest: {
+        name: 'BoardBot',
+        short_name: 'BoardBot',
+        description: 'A hand-drawn whiteboard you edit by describing changes, typed or spoken.',
+        theme_color: '#f6f7f5',
+        background_color: '#f6f7f5',
+        display: 'standalone',
+        icons: [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+        ],
+      },
+    }),
+  ],
   server: { headers: isolationHeaders },
   // Pre-bundled up front, so the first use of voice doesn't make the dev server reload the page.
   optimizeDeps: { include: ['@huggingface/transformers'] },

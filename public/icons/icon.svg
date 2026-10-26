@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- A whiteboard with a hand-drawn box, a blue marker arrow and its aluminium marker tray. -->
+  <rect width="512" height="512" rx="96" fill="#f6f7f5"/>
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="none" stroke="#b9c0c7" stroke-width="12"/>
+  <path d="M120 150 C170 144 250 146 300 150 C306 190 304 230 300 262 C240 266 170 266 122 262 C116 222 116 186 120 150 Z" fill="#a5d8ff" stroke="#1e1e1e" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M300 206 C340 204 362 214 392 236 M392 236 L372 206 M392 236 L360 248" fill="none" stroke="#2459c9" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="64" y="380" width="384" height="44" rx="10" fill="#b9c0c7"/>
+  <rect x="64" y="380" width="384" height="8" rx="4" fill="#e4e8ec"/>
+  <rect x="300" y="362" width="110" height="22" rx="11" fill="#2459c9"/>
+</svg>
