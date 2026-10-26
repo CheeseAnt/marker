@@ -25,6 +25,16 @@ export function measureText(text: string, fontSize: number, font?: FontId): Size
   return { w: Math.ceil(longest * fontSize * fontPreset(font).charWidth), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
 }
 
+/** Estimated size of an edge's label, if it has one. */
+export function edgeLabelSize(board: Board, edge: BoardElement): Size | undefined {
+  if (edge.kind !== 'edge' || !edge.label) return undefined
+  const style = effectiveStyle(board, edge)
+  return measureText(edge.label, style.fontSize ?? DEFAULT_FONT_SIZE, style.font)
+}
+
+/** Room to leave around a label on an arrow, so some of the arrow still shows either side. */
+export const LABEL_MARGIN = 40
+
 export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
   const text = measureText(node.label || ' ', fontSize, font)
   const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70] }[node.shape]

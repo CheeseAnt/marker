@@ -165,6 +165,19 @@ describe('toCoreOps', () => {
     expect(ops[2]).toEqual({ op: 'board', set: { defaults: { font: 'display' } } })
     expect(issues).toEqual(['ops[1] (update "e1"): only nodes have a shape', 'ops[1] (update "e1"): nothing to change', 'ops[3] (ungroup "api"): "api" is not a group'])
   })
+
+  it('leaves room for a label on the arrow to a relatively placed node', () => {
+    const gapOf = (llm: Parameters<typeof toCoreOps>[1]) => {
+      const add = toCoreOps(board, llm).ops.find((o) => o.op === 'add' && o.element.id === 'cache')
+      return add?.op === 'add' && add.element.kind === 'node' && add.element.at?.kind === 'rel' ? add.element.at.gap : undefined
+    }
+    const node = (place: object) => ({ op: 'add_node' as const, id: 'cache', label: 'Cache', place: { rel: 'right' as const, of: 'api', ...place } })
+    expect(gapOf([node({}), { op: 'add_edge', from: 'api', to: 'cache' }])).toBe(60)
+    // "queries" is about 77px wide, so a 60px gap would leave almost no arrow showing.
+    expect(gapOf([node({}), { op: 'add_edge', from: 'api', to: 'cache', label: 'queries' }])).toBeGreaterThan(110)
+    // A gap the model chose is kept.
+    expect(gapOf([node({ gap: 50 }), { op: 'add_edge', from: 'cache', to: 'api', label: 'queries' }])).toBe(50)
+  })
 })
 
 describe('templates', () => {

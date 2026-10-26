@@ -1,6 +1,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { ElkNode } from 'elkjs/lib/elk-api'
-import { intrinsicSize, resolveBoxes, unionBoxes, type Box } from '../model/geometry'
+import { edgeLabelSize, intrinsicSize, LABEL_MARGIN, resolveBoxes, unionBoxes, type Box } from '../model/geometry'
 import type { Op } from '../model/ops'
 import type { Board, BoardElement, Id } from '../model/types'
 
@@ -59,6 +59,8 @@ async function layoutBlock(board: Board, ids: Id[]): Promise<{ boxes: Map<Id, Bo
       'elk.direction': 'DOWN',
       'elk.spacing.nodeNode': '60',
       'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+      'elk.edgeLabels.placement': 'CENTER',
+      'elk.layered.spacing.edgeNodeBetweenLayers': String(LABEL_MARGIN / 2),
     },
     children: ids.map((id) => {
       const size = intrinsicSize(board, byId.get(id)!)!
@@ -68,7 +70,14 @@ async function layoutBlock(board: Board, ids: Id[]): Promise<{ boxes: Map<Id, Bo
       .filter((e) => e.kind === 'edge' && 'id' in e.from && 'id' in e.to && members.has(e.from.id) && members.has(e.to.id))
       .map((e) => {
         const edge = e as Extract<BoardElement, { kind: 'edge' }>
-        return { id: edge.id, sources: [(edge.from as { id: Id }).id], targets: [(edge.to as { id: Id }).id] }
+        // With its label's size, ELK leaves room for the label between the layers.
+        const label = edgeLabelSize(board, edge)
+        return {
+          id: edge.id,
+          sources: [(edge.from as { id: Id }).id],
+          targets: [(edge.to as { id: Id }).id],
+          ...(label && { labels: [{ id: `${edge.id}~label`, text: edge.label, width: label.w, height: label.h }] }),
+        }
       }),
   }
   const result = await elk.layout(graph)
@@ -79,17 +88,25 @@ async function layoutBlock(board: Board, ids: Id[]): Promise<{ boxes: Map<Id, Bo
   return { boxes, w: bounds.w, h: bounds.h }
 }
 
-/** The placed element a component is most connected to, if any. */
-function anchorFor(board: Board, comp: Set<Id>, placed: Map<Id, Box>): Box | undefined {
+/**
+ * The placed element a component is most connected to, if any, and how far below it the
+ * component should go: further when a label on an arrow between them would cover the arrow.
+ */
+function anchorFor(board: Board, comp: Set<Id>, placed: Map<Id, Box>): { box: Box; gap: number } | undefined {
   const counts = new Map<Id, number>()
+  const labelHeights = new Map<Id, number>()
   for (const el of board.elements) {
     if (el.kind !== 'edge' || !('id' in el.from) || !('id' in el.to)) continue
     const [a, b] = [el.from.id, el.to.id]
-    if (comp.has(a) && placed.has(b) && !comp.has(b)) counts.set(b, (counts.get(b) ?? 0) + 1)
-    if (comp.has(b) && placed.has(a) && !comp.has(a)) counts.set(a, (counts.get(a) ?? 0) + 1)
+    const outside = comp.has(a) && placed.has(b) && !comp.has(b) ? b : comp.has(b) && placed.has(a) && !comp.has(a) ? a : undefined
+    if (!outside) continue
+    counts.set(outside, (counts.get(outside) ?? 0) + 1)
+    labelHeights.set(outside, Math.max(labelHeights.get(outside) ?? 0, edgeLabelSize(board, el)?.h ?? 0))
   }
   const best = [...counts].sort((x, y) => y[1] - x[1])[0]
-  return best && placed.get(best[0])
+  if (!best) return undefined
+  const label = labelHeights.get(best[0]) ?? 0
+  return { box: placed.get(best[0])!, gap: Math.max(ANCHOR_GAP, label ? label + LABEL_MARGIN * 2 : 0) }
 }
 
 /**
@@ -145,7 +162,8 @@ export async function placeUnplaced(board: Board, opts: PlaceOptions = {}): Prom
       [...block.boxes.values()].some((b) => [...placed.values()].some((p) => overlaps({ ...b, x: b.x + o.x, y: b.y + o.y }, p)))
     let origin: { x: number; y: number }
     if (anchor) {
-      origin = { x: anchor.x + anchor.w / 2 - block.w / 2, y: anchor.y + anchor.h + ANCHOR_GAP }
+      const { box: a, gap } = anchor
+      origin = { x: a.x + a.w / 2 - block.w / 2, y: a.y + a.h + gap }
       // Below its neighbour, sliding right if that space is taken.
       for (let i = 0; i < MAX_NUDGES && collides(origin); i++) origin = { x: origin.x + 40, y: origin.y }
     } else if (opts.center) {
