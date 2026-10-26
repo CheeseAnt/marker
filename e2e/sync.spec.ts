@@ -57,19 +57,6 @@ test('board text renders, stays stable, picks up drags, and survives reload', as
   await page.reload()
   await expect(page.locator('.excalidraw')).toBeVisible()
   await page.waitForTimeout(800)
-  const diag = await page.evaluate(async () => {
-    const w = window as unknown as { __boardbot: { useBoard: { getState(): { revision: number; lastSource: string } } } }
-    const req = indexedDB.open('keyval-store')
-    const text = await new Promise((res) => {
-      req.onsuccess = () => {
-        const get = req.result.transaction('keyval').objectStore('keyval').get('boardbot.board.v1')
-        get.onsuccess = () => res(get.result)
-      }
-    })
-    const { revision, lastSource } = w.__boardbot.useBoard.getState()
-    return { revision, lastSource, text }
-  })
-  console.log(JSON.stringify(diag))
   const reloaded = (await boardText(page)).board as { title: string; elements: unknown[] }
   expect(reloaded.title).toBe('Sync check')
   expect(reloaded.elements).toEqual(after.elements)

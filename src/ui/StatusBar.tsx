@@ -1,8 +1,8 @@
+import { isProviderReady, PROVIDER_LABELS } from '../ai/providers'
 import { hasApiKey, useSettings } from '../settings/store'
 import { useBoard } from '../state/board'
 import { DRAWER_LABELS, type DrawerView } from './drawerViews'
 
-const PROVIDER_LABELS = { 'azure-foundry': 'Azure AI Foundry' } as const
 const VOICE_LABELS = {
   'moonshine-base': 'Moonshine base',
   'moonshine-tiny': 'Moonshine tiny',
@@ -15,25 +15,26 @@ interface Props {
   onDismissNotice: () => void
   drawer: DrawerView | null
   onToggleDrawer: (view: DrawerView) => void
+  onOpenSettings: () => void
 }
 
-export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer }: Props) {
+export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onOpenSettings }: Props) {
   const settings = useSettings((s) => s.settings)
   const secrets = useSettings((s) => s.secrets)
   const count = useBoard((s) => s.board.elements.filter((e) => e.kind !== 'group').length)
   const provider = settings.activeProvider
   const config = settings.providers[provider]
-  const configured = Boolean(config.endpoint && config.deployment)
-  const ready = configured && hasApiKey(secrets, provider)
+  const ready = isProviderReady(settings, secrets)
+  const configured = ready || Boolean(config.endpoint.trim())
   const voice = settings.voice
 
   return (
     <footer className="status">
       <span>{voice.mode === 'off' ? 'Voice off' : voice.mode === 'on-device' ? `Voice: ${VOICE_LABELS[voice.onDeviceModel]}` : `Voice: ${voice.mode}`}</span>
-      <span className={ready ? '' : 'attention'}>
+      <button type="button" className={`status-link ${ready ? '' : 'attention'}`} onClick={onOpenSettings} title="Open settings">
         {PROVIDER_LABELS[provider]}
-        {!configured ? ' not set up' : !hasApiKey(secrets, provider) ? ' needs an API key' : `: ${config.deployment}`}
-      </span>
+        {ready ? `: ${config.deployment || 'connected'}` : !configured ? ' not set up' : !hasApiKey(secrets, provider) ? ' needs an API key' : ' needs a deployment'}
+      </button>
       {notice ? (
         <span className="status-notice" role="alert">
           <span title={notice}>{notice}</span>
@@ -44,6 +45,9 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer }: P
       ) : null}
       <span className="spacer" />
       <span>{count === 1 ? '1 element' : `${count} elements`}</span>
+      <button type="button" className="status-link" onClick={onOpenSettings}>
+        Settings
+      </button>
       <div className="drawer-toggles" role="group" aria-label="Side panel">
         {(Object.keys(DRAWER_LABELS) as DrawerView[]).map((view) => (
           <button key={view} type="button" aria-pressed={drawer === view} onClick={() => onToggleDrawer(view)}>

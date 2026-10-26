@@ -220,6 +220,17 @@ interface LLMProvider {
 - **Transcript lands in the prompt bar** so the user can edit it. A setting allows "auto-send after speaking".
 - **Hosting gotcha:** multi-threaded WASM needs cross-origin isolation (COOP/COEP). Pick a host that can set headers (Cloudflare Pages, Netlify, Azure Static Web Apps), or use `coi-serviceworker` on GitHub Pages.
 
+## 6b. Keyboard shortcuts for prompting
+
+- **Focus the prompt bar: `/`.** Ignored while typing in a field. Escape returns focus to the canvas. Shipped in phase 4.
+- **Microphone: hold Ctrl+Shift+Space to talk, release to stop.**
+  - A tap shorter than about 300 ms toggles recording on, and a second tap stops it.
+  - It works while focus is in the prompt bar, and the transcript lands there.
+  - The mic button and the status bar show "recording" while it's held.
+  - Shipped with voice in phase 7.
+- **Why these keys:** they avoid Excalidraw's bindings (letters and digits for tools, Space to pan, `?` for help, Cmd/Ctrl+/ for the command palette) and common browser and OS shortcuts (Cmd+Space, Ctrl+Space input switching, Cmd+Shift+M).
+- **Remappable:** both are listed in Settings → Shortcuts, with conflict detection against Excalidraw's shortcuts. They're stored in settings, so they're included in settings export.
+
 ## 7. Job queue and status bar
 
 Every voice or text request becomes a **Job** in a central queue (`src/jobs/queue.ts`, zustand store). The status bar renders that queue.
@@ -308,7 +319,7 @@ recording → transcribing → queued → building context → calling model →
 | 5. NL editing | Prompt and tool schemas, context builder, validation/repair loop, apply + highlight + undo toast, conflict handling | 2–3 wks |
 | 5b. Templates | Template board flag, params and ports, `use`/`define` in the DSL, recursive expansion, overrides and detach, library panel, save selection as template, version pinning and updates, AI catalog and ops | 2–2.5 wks |
 | 6. Images | Asset store, place/paste, `.boardz`, images as LLM context | ~1 wk |
-| 7. Voice | Capture worklet, on-device model catalog and worker (Moonshine, Whisper .en), Web Speech, provider-remote engine, voice settings, mic UI | 1–1.5 wks |
+| 7. Voice | Push-to-talk hotkey (§6b), capture worklet, on-device model catalog and worker (Moonshine, Whisper .en), Web Speech, provider-remote engine, voice settings, mic UI | 1–1.5 wks |
 | 8. Jobs + status bar | Job queue and lifecycle, cancellation, streaming progress, status bar, queue panel. The basic queue lands with phase 5; this phase is the full UI | ~1 wk |
 | 9. Usage + cost | Ledger, editable pricing table, usage panel and chart, CSV export, budget guard | ~1 wk |
 | 9b. Settings export/import | Schema versioning, secret stripping, import diff summary, merge or replace | 2–3 days |
@@ -343,6 +354,17 @@ recording → transcribing → queued → building context → calling model →
 - **Where it shows:** undo and redo buttons sit in Excalidraw's footer, beside zoom. The History drawer lists changes newest first, marks the current state, strikes through undone steps, and jumps on click.
 - **Persistence:** history (capped at 300) is saved to IndexedDB in the same write as the board text, tagged with a hash of that text. It's only restored when the hash matches.
 - **Deferred to phase 10:** the optional `history` section inside saved `.board` files lands with real file open and save.
+
+**Phase 4 (done, 2026-10-26)**
+- **Provider interface (`src/ai/providers/types.ts`):** streaming `complete()` with tool calls, image parts and usage, plus `testConnection()`, which forces a tool call so it also confirms the deployment can edit boards. Failures are `ProviderError`s with a kind (auth, not-found, rate-limit with retry-after, network, config, and so on) and a message written for the user.
+- **Azure AI Foundry (`azureFoundry.ts`):**
+  - plain `fetch` with SSE parsing, `api-key` header, `max_completion_tokens`, and `stream_options.include_usage` (except on the models endpoint);
+  - three endpoint types (deployments, v1, models), detected from the URL;
+  - a pasted portal URL fills in the deployment and API version;
+  - an empty API version means the default for the endpoint type.
+- **Settings dialog:** a native `<dialog>`. Edits are staged until Save; the test uses the staged values. The API key is stored separately from settings, and the E2E test checks that it never appears in the settings record. The provider name in the status strip opens the dialog. With no model configured, Draw opens Settings.
+- **Shortcuts:** `/` focuses the prompt bar and Escape returns to the canvas. Both are in the settings schema (`shortcuts`); the remapping UI comes with phase 7.
+- **Live check still needed:** tests use a mocked Azure. The first real "Test connection" against `gpt-5.6-luna` should be done by hand.
 
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.

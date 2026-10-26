@@ -5,12 +5,14 @@ import { BoardCanvas } from './BoardCanvas'
 import { Drawer } from './Drawer'
 import type { DrawerView } from './drawerViews'
 import { PromptBar } from './PromptBar'
+import { SettingsDialog } from './SettingsDialog'
 import { StatusBar } from './StatusBar'
 
 export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<DrawerView | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const onError = useCallback((message: string) => setNotice(message), [])
 
   useEffect(() => {
@@ -54,13 +56,15 @@ export default function App() {
     <div className="app">
       <main className="canvas">{loaded && <BoardCanvas onError={onError} />}</main>
       {drawer && <Drawer view={drawer} />}
-      <PromptBar />
+      <PromptBar onOpenSettings={() => setSettingsOpen(true)} />
       <StatusBar
         notice={notice}
         onDismissNotice={() => setNotice(null)}
         drawer={drawer}
         onToggleDrawer={(view) => setDrawer((current) => (current === view ? null : view))}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

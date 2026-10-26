@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { isProviderReady } from '../ai/providers'
+import { useSettings } from '../settings/store'
 
 function MicIcon() {
   return (
@@ -9,29 +11,73 @@ function MicIcon() {
   )
 }
 
+function isTypingTarget(el: EventTarget | null): boolean {
+  return el instanceof HTMLElement && (el.matches('input, textarea, select, [contenteditable="true"]') || el.isContentEditable)
+}
+
 /** The marker ledge: requests are written here, in the board's handwriting. */
-export function PromptBar() {
+export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [text, setText] = useState('')
+  const [focused, setFocused] = useState(false)
+  const input = useRef<HTMLInputElement>(null)
+  const ready = useSettings((s) => isProviderReady(s.settings, s.secrets))
+  const focusKey = useSettings((s) => s.settings.shortcuts.focusPrompt)
+
+  // The focus shortcut works from anywhere except while typing in another field.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== focusKey || e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return
+      if (document.querySelector('dialog[open]')) return
+      e.preventDefault()
+      input.current?.focus()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [focusKey])
 
   return (
     <form
       className="ledge"
       onSubmit={(e) => {
         e.preventDefault()
-        // Sent to the edit pipeline once a model provider is wired up.
+        if (!ready) onOpenSettings()
+        // Sent to the edit pipeline in phase 5.
       }}
     >
-      <input
-        className="ledge-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        aria-label="Describe a change to the board"
-        placeholder="Add a database below the API and connect them"
-      />
+      <div className="ledge-field">
+        <input
+          ref={input}
+          id="prompt-input"
+          className="ledge-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.currentTarget.blur()
+              document.querySelector<HTMLElement>('.excalidraw')?.focus()
+            }
+          }}
+          aria-label="Describe a change to the board"
+          aria-keyshortcuts={focusKey}
+          placeholder="Add a database below the API and connect them"
+        />
+        {!focused && !text && (
+          <kbd className="ledge-shortcut" aria-hidden="true" title={`Press ${focusKey} to write a request`}>
+            {focusKey}
+          </kbd>
+        )}
+      </div>
       <button type="button" className="ledge-button icon" disabled aria-label="Speak a change" title="Voice input isn't available yet">
         <MicIcon />
       </button>
-      <button type="submit" className="ledge-button primary" disabled title="Connect a model to draw from a description">
+      <button
+        type="submit"
+        className="ledge-button primary"
+        disabled={ready && !text.trim()}
+        title={ready ? 'Draw this change' : 'Set up a model in Settings first'}
+      >
         Draw
       </button>
     </form>

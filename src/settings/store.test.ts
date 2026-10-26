@@ -6,7 +6,8 @@ describe('settingsSchema', () => {
     const s = settingsSchema.parse({})
     expect(s.voice.mode).toBe('on-device')
     expect(s.voice.onDeviceModel).toBe('moonshine-base')
-    expect(s.providers['azure-foundry'].apiVersion).toBeTruthy()
+    expect(s.providers['azure-foundry']).toMatchObject({ endpointStyle: 'auto', apiVersion: '' })
+    expect(s.shortcuts).toEqual({ focusPrompt: '/', pushToTalk: 'Ctrl+Shift+Space' })
   })
 
   it('has no field that can carry an API key', () => {
