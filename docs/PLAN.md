@@ -1,7 +1,7 @@
 # Marker: plan for an AI-edited whiteboard
 
 ## Context
-This is a new project in an empty repo (`/Users/anton/Documents/git/marker`). The goal is a browser-only virtual whiteboard with a hand-drawn look. Users edit it **first through natural language** (typed or spoken), and an external LLM turns each request into diagram changes. Manual editing stays available. Other requirements:
+This started as a new project in an empty repo, under the name BoardBot; it was renamed Marker on 2026-10-26. The goal is a browser-only virtual whiteboard with a hand-drawn look. Users edit it **first through natural language** (typed or spoken), and an external LLM turns each request into diagram changes. Manual editing stays available. Other requirements:
 - Model providers are interchangeable, chosen by a setting plus an API key. The first one is **Azure AI Foundry**.
 - A board is fully contained in a text file that compiles to canvas elements and decompiles back.
 - A change log drives undo and redo.
@@ -422,7 +422,7 @@ recording → transcribing → queued → building context → calling model →
   - moving or deleting single parts is rejected and reverted, with a Detach action.
 - **Library:** in IndexedDB as DSL text per version. The Templates drawer tab shows previews with defaults filled in, Add to board, Update copies to the latest version (reporting params and overrides that no longer fit), Delete, and "Used on this board, not in your library → Save to library" (keeping the board's version number). "Save selection as template" offers a name, description, fill-in texts, connection points with sides, and the option to replace the selection with a copy (outside edges move to its ports).
 - **Model:** each request gets a catalog of templates (description, fill-ins with defaults, ports, parts), and board text is sent without `define` blocks. New ops `add_copy` (library latest, or the board's version), `update_copy` (params, place, scale, `part_text`, `part_style`) and `detach`; edges accept `copy.port`.
-- **Not yet:** a canvas badge for "update available" (shown in the Templates tab instead), `.boardlib` import/export (phase 10, with files), and editing a template visually in place. Edit a template by detaching a copy, changing it, and saving it again under the same name, which creates the next version.
+- **Later (all since done or decided):** `.boardlib` import/export came with phase 10, and the canvas update badge and colour fill-ins with the deferred work below. Editing a template in place was decided against: edit a template by detaching a copy, changing it, and saving it again under the same name, which creates the next version.
 
 **Phase 6: images (done, 2026-10-26)**
 - **Asset store (`src/assets/`):** IndexedDB `marker.asset.<sha1>` holding the data URL, mime type and natural size. The id is the SHA-1 of the bytes, which matches Excalidraw's file ids, so a pasted or dropped image's `fileId` is the board's `asset:<id>`.
@@ -500,6 +500,27 @@ recording → transcribing → queued → building context → calling model →
 - **Evals (`evals/`):** 31 cases with tolerant structural checks. `npm run eval` replays `evals/recordings/*.json` (cases without one are skipped; one hand-written example is included), and `npm run eval:live` records against Azure from the `MARKER_AZURE_*` env vars.
 - **Production checks:** `npm run e2e:preview` builds and runs `e2e/preview/` against `vite preview`, covering the policy (no violations), on-device speech under the policy, and opening offline.
 
+**Rename and deferred work (done, 2026-10-26)**
+- **Renamed to Marker:** every name, env var (`MARKER_*`), dev hook (`window.__marker`), cache and storage key. `src/storage/migrateName.ts` moves data saved under `boardbot.*`:
+  - localStorage (settings, keys) synchronously, imported first by `main.tsx`, before any store reads it;
+  - IndexedDB (board, history, file handle, templates, images, and the usage database) before the app renders, copying before deleting so an interrupted move repeats.
+
+  Files exported with the old `boardbot-settings` / `boardbot-library` tags still import, and the service worker drops the old cache. File extensions are unchanged.
+- **Prompt box:** written in Comic Shanns (the "Code" preset), with `autocomplete="off"` so the browser doesn't offer earlier requests.
+- **Room for arrow labels:** ELK gets each edge label's size; a group placed below its anchor moves further down for a labelled arrow; a model placement with no gap widens to the label's width (or height) plus 40px.
+- **`undo_first` tied to send time:** each request keeps the newest changes from when it was sent and builds "Recent changes" from them. `undo_first` undoes those, only while they're still the newest; otherwise the request fails, pointing to History.
+- **Follow links:** relative placement stays live (the open question is settled). While something is dragged, a dashed link runs to each element that will follow it. They're drawn by `CanvasOverlay`, which tracks Excalidraw's scroll and zoom.
+- **Cylinders:** `cylinder` compiles to an invisible rectangle carrying the id, bindings and label, plus a closed outline (`~body`) and a rim (`~rim`), grouped under the node. The label's container is the band between the rims, and the outline goes beneath it, since Excalidraw keeps a label just above its container. Moves, resizes and recolours are read from the outline.
+- **Frames:** `frame <id> "<name>" [members] [at(x,y) size(w,h)]` compiles to an Excalidraw frame. Without a box it wraps its members plus 40px padding. Membership is read back from `frameId`, frames drawn by hand are adopted, and the model has a `frame` op.
+- **Short ids:** two seconds after the canvas goes quiet, elements drawn by hand are renamed (`rect1`, `arrow2`, …) with a new core `rename` op, folded into the user's newest canvas edit so it undoes with it.
+- **Dark theme:** a `theme` setting (system, light, dark) in the main menu and Settings. Interface colours are tokens with a dark palette (all text pairs pass WCAG AA), and Excalidraw gets the same theme. `public/theme.js` applies it before the first paint. The usage chart's dark bars were checked with the dataviz validator.
+- **Labels:** text is measured again once pending font loads finish, and the Latin range of every face is preloaded, so labels are no longer clipped. Labels in rectangles, sticky notes and cylinders wrap to the shape's width; what was typed stays in `originalText`, which is what decompiling reads.
+- **Templates:**
+  - an "Update to vN" pill on each outdated copy updates just that copy;
+  - `fill={param}` and `stroke={param}` take colours per copy, with overrides still winning;
+  - "Save selection as template" can make a shape's fill or outline a fill-in;
+  - the model's catalog says which fill-ins are colours.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.
@@ -515,23 +536,14 @@ recording → transcribing → queued → building context → calling model →
 
 ## Deferred work and open questions
 
-Everything put off along the way, in one place. Each item says where it came from and roughly what it involves.
+Everything still put off, in one place. Each item says where it came from and roughly what it involves.
 
 ### Model quality
 - **Record and run the evals** (phase 5, 10). `npm run eval:live` against `gpt-5.6-luna` records answers for the 31 cases in `evals/cases.ts`; only one hand-written example is recorded so far. The failures should drive changes to the system prompt and op descriptions.
-- **Arrow labels on short arrows** (phase 5). When connected nodes are close, a label such as "queries" covers most of the arrow. Layout (`placeUnplaced`, and relative-placement gaps) should leave more room when an edge has a label.
-- **`undo_first` with requests running at once** (phase 8). With two requests in flight, "undo that" is validated against whatever is newest when the answer is checked, which may be the other request's change. Consider tying `undo_first` to the history at the time the request was sent and failing safely if it moved.
 
 ### Board model and canvas
-- **Shapes not yet modelled** (phase 2): `cylinder` (a composite database shape) and Excalidraw `frame`s. Frames drawn on the canvas are currently ignored.
-- **Live relative placement** (phase 5 review). A node placed `below(api)` follows `api` when it moves, until the node is dragged itself. This is by design, but it can surprise people. Options are to pin on first render, or to keep it live and show the link while dragging. Not decided.
-- **Ids of hand-drawn elements** (phase 2). Shapes drawn on the canvas keep Excalidraw's long random ids, which make the board text harder to read and cost the model tokens. They could be renamed to short ids when the canvas is idle.
-- **Dark theme.** The interface is light only, and Excalidraw's theme toggle is left out of the menu. A dark palette would need its own validated colours, including the usage chart's.
-
-### Templates
-- **"Update available" badge on the canvas** (phase 5b). Outdated copies are only shown in the Templates tab.
-- **Editing a template in place** (phase 5b). Today you detach a copy, edit it, and save it again under the same name.
-- **Style params** (phase 5b). Params only fill text (`{name}`). Per-copy colours use overrides; `fill={color}`-style params would need DSL syntax.
+- **Labels in ellipses and diamonds** don't wrap. Their default sizes leave less room inside than the label's width, so wrapping them would change existing drawings; it needs new default sizes first.
+- **Old long ids.** Only elements drawn since the canvas loaded get short ids; boards saved before keep Excalidraw's long ones.
 
 ### Images and files
 - **Cleaning up unused images** (phase 6). Image assets in IndexedDB are never deleted. They could be garbage-collected when no board, history entry or template refers to them.
@@ -545,6 +557,10 @@ Everything put off along the way, in one place. Each item says where it came fro
 - **Precache size** (phase 10). The service worker precaches about 10.5 MB, mostly Excalidraw's diagram-import chunks (Mermaid and similar). They could be cached on first use instead.
 - **Browsers other than Chromium.** All automated tests run in Chromium. Safari and Firefox (microphone, file pickers, service worker, cross-origin isolation) haven't been checked.
 - **More providers** (§4). OpenAI, Anthropic, Gemini and local models fit behind the provider interface; only Azure AI Foundry is built.
+
+### Decided
+- **Live relative placement:** kept live, with follow links while dragging.
+- **Editing a template in place:** not needed; detach a copy, change it, and save it under the same name.
 
 ### Answered or still open from the original plan
 - **File extension and history (answered):** `.board` (text) and `.boardz` (zip); undo history is saved in files by default.
