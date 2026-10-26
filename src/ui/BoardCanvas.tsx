@@ -7,6 +7,8 @@ import { imageSize } from '../assets/image'
 import { cachedAsset, loadAsset, saveAsset } from '../assets/store'
 import { detachOps } from '../templates/detach'
 import { useToast } from '../state/toast'
+import { useJobs } from '../jobs/queue'
+import { isGeneratedId, shortIdOps } from '../model/shortIds'
 import type { ExElement } from '../compile/exTypes'
 import { OpError } from '../model/apply'
 import { DEFAULT_FONT, FONT_PRESETS, fontPreset, withBoardFont, type FontId } from '../model/fonts'
@@ -22,6 +24,21 @@ import { CanvasOverlay, type FollowLink } from './CanvasOverlay'
 import { toScreen, type View } from './canvasView'
 
 const HIGHLIGHT_MS = 1600
+/** How long the canvas must be quiet before hand-drawn elements get short ids. */
+const RENAME_IDLE_MS = 2000
+
+/** Excalidraw ids that belong to a renamed board element: itself, its label, its parts. */
+function renamedExId(exId: string, renamed: Map<string, string>): string {
+  for (const [from, to] of renamed) {
+    if (exId === from) return to
+    if (exId.startsWith(from) && ['~', '/'].includes(exId[from.length])) return to + exId.slice(from.length)
+  }
+  return exId
+}
+
+function renameKeys(record: Readonly<Record<string, boolean>>, renamed: Map<string, string>): Record<string, true> {
+  return Object.fromEntries(Object.keys(record).filter((k) => record[k]).map((k) => [renamedExId(k, renamed), true]))
+}
 
 /** Gives Excalidraw the bytes of any board image it doesn't have yet. */
 async function loadImages(api: ExcalidrawImperativeAPI) {
@@ -123,6 +140,10 @@ export function BoardCanvas({ onError }: Props) {
   // Set when text must be re-measured even though the board itself did not change.
   const forceRender = useRef(false)
   const pendingHighlight = useRef<string[] | null>(null)
+  // Elements drawn by hand that still have Excalidraw's long ids, and ids just renamed.
+  const toShorten = useRef(new Set<string>())
+  const justRenamed = useRef<Map<string, string> | null>(null)
+  const renameTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   // The board font last pushed to Excalidraw as its font for new text.
   const defaultFamily = useRef(fontPreset(useBoard.getState().board.defaults.font).family)
   const [highlights, setHighlights] = useState<{ key: number; boxes: Box[] } | null>(null)
@@ -147,9 +168,17 @@ export function BoardCanvas({ onError }: Props) {
     const family = fontPreset(useBoard.getState().board.defaults.font).family
     const fontChanged = family !== defaultFamily.current
     defaultFamily.current = family
+    // Keep the selection on elements that were just given short ids.
+    const renamed = justRenamed.current
+    justRenamed.current = null
+    const before = api.getAppState()
+    const selection = renamed && {
+      selectedElementIds: renameKeys(before.selectedElementIds, renamed),
+      selectedGroupIds: renameKeys(before.selectedGroupIds ?? {}, renamed),
+    }
     api.updateScene({
       elements,
-      ...(fontChanged && { appState: { currentItemFontFamily: family as never } }),
+      ...((fontChanged || selection) && { appState: { ...(fontChanged && { currentItemFontFamily: family as never }), ...selection } as never }),
       captureUpdate: CaptureUpdateAction.NEVER,
     })
     seenVersion.current = hashElementsVersion(api.getSceneElementsIncludingDeleted())
@@ -205,6 +234,37 @@ export function BoardCanvas({ onError }: Props) {
     return () => registerCanvas(null)
   }, [])
 
+  /**
+   * Gives hand-drawn elements short ids (rect1, arrow2) once the canvas has been quiet for a
+   * moment. The renames join the user's newest change, so undoing it undoes them too.
+   */
+  const shortenIds = useCallback(() => {
+    const api = apiRef.current
+    if (!api) return
+    const typing = document.activeElement?.matches('textarea, input')
+    if (isInteracting(api.getAppState()) || typing) {
+      renameTimer.current = setTimeout(shortenIds, RENAME_IDLE_MS)
+      return
+    }
+    const { board, history, amend } = useBoard.getState()
+    // Only fold the renames into the user's own canvas edit; otherwise wait for the next one.
+    if (history.past.at(-1)?.source !== 'manual') return
+    const ops = shortIdOps(board, toShorten.current)
+    toShorten.current.clear()
+    if (!ops.length) return
+    const renamed = new Map(ops.flatMap((o) => (o.op === 'rename' ? [[o.from, o.to] as const] : [])))
+    justRenamed.current = renamed
+    if (amend(ops)) useJobs.getState().renameIds(renamed)
+    else justRenamed.current = null
+  }, [])
+
+  const scheduleShortIds = useCallback(() => {
+    clearTimeout(renameTimer.current)
+    renameTimer.current = setTimeout(shortenIds, RENAME_IDLE_MS)
+  }, [shortenIds])
+
+  useEffect(() => () => clearTimeout(renameTimer.current), [])
+
   const readScene = useCallback(() => {
     const api = apiRef.current
     if (!api) return
@@ -223,7 +283,11 @@ export function BoardCanvas({ onError }: Props) {
     const { board, compiled, apply } = useBoard.getState()
     try {
       const { ops, rejected } = diffSceneDetailed({ board, compiled, scene: scene as unknown as ExElement[] })
-      if (ops.length) apply(ops, 'manual')
+      if (ops.length) {
+        apply(ops, 'manual')
+        for (const op of ops) if (op.op === 'add' && isGeneratedId(op.element.id)) toShorten.current.add(op.element.id)
+        if (toShorten.current.size) scheduleShortIds()
+      }
       if (rejected.length) {
         // Parts of a template copy move together; put them back and offer to detach the copy.
         if (!ops.length) render()
@@ -244,9 +308,11 @@ export function BoardCanvas({ onError }: Props) {
       onError(e instanceof OpError ? `Could not record that edit: ${e.issues[0]}` : String(e))
       render()
     }
-  }, [onError, render])
+  }, [onError, render, scheduleShortIds])
 
   const readSoon = useMemo(() => debounce(readScene, 250), [readScene])
+
+
 
   // Undo must see edits that are still waiting for the debounce.
   useEffect(() => {

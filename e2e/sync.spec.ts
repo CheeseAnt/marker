@@ -65,3 +65,26 @@ test('board text renders, stays stable, picks up drags, and survives reload', as
   expect(reloaded.elements).toEqual(after.elements)
   expect(errors).toEqual([])
 })
+
+test('shapes drawn by hand get short ids once the canvas is quiet', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => indexedDB.deleteDatabase('keyval-store'))
+  await page.reload()
+  await expect(page.locator('.excalidraw')).toBeVisible()
+  const ids = async () => ((await boardText(page)).board as { elements: { id: string }[] }).elements.map((e) => e.id)
+
+  const box = (await page.locator('canvas.interactive').boundingBox())!
+  await page.getByTitle(/^Rectangle/).click()
+  await page.mouse.move(box.x + 400, box.y + 200)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 560, box.y + 300, { steps: 5 })
+  await page.mouse.up()
+  await expect.poll(ids).toHaveLength(1)
+  expect((await ids())[0]).not.toBe('rect1')
+  await expect.poll(ids, { timeout: 6000 }).toEqual(['rect1'])
+  // The drawing and its rename undo as one step.
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect.poll(ids).toEqual([])
+  await page.getByRole('button', { name: 'Redo' }).click()
+  await expect.poll(ids).toEqual(['rect1'])
+})

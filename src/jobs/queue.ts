@@ -70,6 +70,8 @@ interface QueueState {
   cancel: (id: string) => void
   retry: (id: string, opts?: { overBudgetOk?: boolean }) => void
   clearFinished: () => void
+  /** Follows elements that were given new ids, so waiting requests still mean them. */
+  renameIds: (renamed: Map<Id, Id>) => void
 }
 
 const controllers = new Map<string, AbortController>()
@@ -219,6 +221,9 @@ export const useJobs = create<QueueState>((set, get) => {
     },
     clearFinished: () => {
       set({ jobs: get().jobs.filter(isPending) })
+    },
+    renameIds: (renamed) => {
+      set({ jobs: get().jobs.map((j) => (isPending(j) && j.selection.some((id) => renamed.has(id)) ? { ...j, selection: j.selection.map((id) => renamed.get(id) ?? id) } : j)) })
     },
   }
 })

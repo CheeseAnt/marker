@@ -1,7 +1,7 @@
 import { resolveBoxes } from './geometry'
 import { FIXED_FIELDS, MERGED_FIELDS, type Op } from './ops'
 import { definitionCycle, usedDefinitions } from '../templates/expand'
-import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Id, type InstanceElement } from './types'
+import { definitionSchema, elementSchema, parseTemplateKey, type Board, type BoardElement, type Endpoint, type Id, type InstanceElement } from './types'
 
 export class OpError extends Error {
   readonly issues: string[]
@@ -136,6 +136,11 @@ export function applyOp(board: Board, op: Op): { board: Board; inverse: Op } {
         inverse: prev ? { op: 'define', key: op.key, board: prev as never } : { op: 'undefine', key: op.key },
       }
     }
+    case 'rename': {
+      if (indexOf(board, op.from) < 0) throw new OpError([`cannot rename unknown element "${op.from}"`])
+      if (indexOf(board, op.to) >= 0) throw new OpError([`id "${op.to}" already exists`])
+      return { board: renameRefs(board, op.from, op.to), inverse: { op: 'rename', from: op.to, to: op.from } }
+    }
     case 'undefine': {
       const prev = board.definitions[op.key]
       if (!prev) throw new OpError([`there is no template ${op.key} to remove`])
@@ -144,6 +149,23 @@ export function applyOp(board: Board, op: Op): { board: Board; inverse: Op } {
       return { board: { ...board, definitions }, inverse: { op: 'define', key: op.key, board: prev as never } }
     }
   }
+}
+
+/** The board with element `from` called `to`, and every reference to it following. */
+function renameRefs(board: Board, from: Id, to: Id): Board {
+  const swap = (id: Id) => (id === from ? to : id)
+  const elements = board.elements.map((el): BoardElement => {
+    let next: BoardElement = el.id === from ? { ...el, id: to } : el
+    if (next.kind === 'edge') {
+      const end = (e: Endpoint): Endpoint => ('id' in e && e.id === from ? { ...e, id: to } : e)
+      next = { ...next, from: end(next.from), to: end(next.to) }
+    }
+    if ((next.kind === 'group' || next.kind === 'frame') && next.members.includes(from)) next = { ...next, members: next.members.map(swap) }
+    if ('at' in next && next.at && 'kind' in next.at && next.at.kind === 'rel' && next.at.of === from) next = { ...next, at: { ...next.at, of: to } } as BoardElement
+    return next
+  })
+  const template = board.template && { ...board.template, ports: board.template.ports.map((p) => ({ ...p, target: swap(p.target) })) }
+  return { ...board, elements, ...(template && { template }) }
 }
 
 /** Ops needed before removing `id` so nothing is left pointing at it. */

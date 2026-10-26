@@ -37,6 +37,11 @@ interface BoardState {
    * on failure. Returns undefined when the ops change nothing.
    */
   apply: (ops: readonly Op[], source: ChangeSource, options?: ApplyOptions) => Transaction | undefined
+  /**
+   * Folds ops into the newest change instead of recording a new one, so undoing that change
+   * undoes them too. Only while nothing has been undone; returns whether it applied them.
+   */
+  amend: (ops: readonly Op[]) => boolean
   undo: () => void
   redo: () => void
   jumpTo: (transactionId: string | null) => void
@@ -90,6 +95,21 @@ export const useBoard = create<BoardState>((set, get) => {
         lastSource: source,
       })
       return tx
+    },
+    amend: (ops) => {
+      const { board, history, revision } = get()
+      const last = history.past.at(-1)
+      if (!last || history.future.length || ops.length === 0) return false
+      const applied = commit(board, ops)
+      const tx: Transaction = { ...last, ops: [...last.ops, ...applied.ops], inverse: [...applied.inverse, ...last.inverse] }
+      set({
+        board: applied.board,
+        compiled: compileBoard(applied.board),
+        history: { ...history, past: [...history.past.slice(0, -1), tx] },
+        revision: revision + 1,
+        lastSource: last.source,
+      })
+      return true
     },
     undo: () => move(undo),
     redo: () => move(redo),
