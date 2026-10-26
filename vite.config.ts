@@ -15,5 +15,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Excalidraw's ESM build uses extensionless deep imports; let Vite resolve them.
+    server: { deps: { inline: ['@excalidraw/excalidraw'] } },
   },
 })

@@ -1,23 +1,37 @@
-import { get, set } from 'idb-keyval'
+import { del, get, set } from 'idb-keyval'
 
-// Temporary autosave of the raw Excalidraw scene. Replaced by the board DSL in phase 2.
-const SCENE_KEY = 'boardbot.scene.v0'
+const BOARD_KEY = 'boardbot.board.v1'
+// Phase 1 autosaved the raw Excalidraw scene; it is migrated once and then deleted.
+const LEGACY_SCENE_KEY = 'boardbot.scene.v0'
+const CORRUPT_KEY = 'boardbot.board.corrupt'
 
-export interface StoredScene {
-  elements: readonly unknown[]
-  savedAt: number
-}
-
-export async function loadScene(): Promise<StoredScene | undefined> {
+export async function loadBoardText(): Promise<string | undefined> {
   try {
-    return await get<StoredScene>(SCENE_KEY)
+    return await get<string>(BOARD_KEY)
   } catch {
     return undefined
   }
 }
 
-export async function saveScene(elements: readonly unknown[]): Promise<void> {
-  await set(SCENE_KEY, { elements, savedAt: Date.now() } satisfies StoredScene)
+export async function saveBoardText(text: string): Promise<void> {
+  await set(BOARD_KEY, text)
+}
+
+/** Keeps unreadable board text aside instead of overwriting it. */
+export async function quarantineBoardText(text: string): Promise<void> {
+  await set(CORRUPT_KEY, { text, at: Date.now() })
+}
+
+export async function loadLegacyScene(): Promise<readonly unknown[] | undefined> {
+  try {
+    return (await get<{ elements: readonly unknown[] }>(LEGACY_SCENE_KEY))?.elements
+  } catch {
+    return undefined
+  }
+}
+
+export async function deleteLegacyScene(): Promise<void> {
+  await del(LEGACY_SCENE_KEY)
 }
 
 export function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number) {

@@ -1,27 +1,38 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Excalidraw } from '@excalidraw/excalidraw'
-import type { ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types'
-import { debounce, loadScene, saveScene } from '../storage/idb'
+import { useCallback, useEffect, useState } from 'react'
+import { startPersistence } from '../state/persist'
+import { BoardCanvas } from './BoardCanvas'
+import { BoardTextPanel } from './BoardTextPanel'
 import { PromptBar } from './PromptBar'
 import { StatusBar } from './StatusBar'
 
 export default function App() {
-  const [initialData, setInitialData] = useState<ExcalidrawInitialDataState | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [showText, setShowText] = useState(false)
+  const onError = useCallback((message: string) => setNotice(message), [])
 
   useEffect(() => {
-    loadScene().then((stored) => {
-      setInitialData({
-        elements: (stored?.elements ?? []) as ExcalidrawInitialDataState['elements'],
-      })
+    let stop: (() => void) | undefined
+    let cancelled = false
+    startPersistence(onError).then((unsubscribe) => {
+      if (cancelled) unsubscribe()
+      else stop = unsubscribe
+      setLoaded(true)
     })
-  }, [])
+    return () => {
+      cancelled = true
+      stop?.()
+    }
+  }, [onError])
 
   // Undo/redo belongs to BoardBot's history (plan §2), so Excalidraw's shortcuts are swallowed.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const mod = e.metaKey || e.ctrlKey
       const key = e.key.toLowerCase()
-      if (mod && (key === 'z' || key === 'y')) {
+      const target = e.target as HTMLElement | null
+      // Text fields outside the canvas keep their native undo.
+      const ownField = target?.matches('input, textarea') && !target.closest('.excalidraw')
+      if ((e.metaKey || e.ctrlKey) && (key === 'z' || key === 'y') && !ownField) {
         e.preventDefault()
         e.stopImmediatePropagation()
       }
@@ -30,19 +41,21 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
   }, [])
 
-  const autosave = useMemo(() => debounce(saveScene, 500), [])
-  const onChange = useCallback(
-    (elements: readonly unknown[]) => autosave(elements),
-    [autosave],
-  )
-
   return (
     <div className="app">
-      <div className="canvas">
-        {initialData && <Excalidraw initialData={initialData} onChange={onChange} />}
-      </div>
+      <main className="canvas">
+        {loaded && (
+          <BoardCanvas onError={onError} />
+        )}
+      </main>
+      {showText && <BoardTextPanel />}
       <PromptBar />
-      <StatusBar />
+      <StatusBar
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+        showText={showText}
+        onToggleText={() => setShowText((v) => !v)}
+      />
     </div>
   )
 }

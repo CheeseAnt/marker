@@ -319,6 +319,24 @@ recording → transcribing → queued → building context → calling model →
 
 ---
 
+## Implementation notes
+
+**Phase 2 (done, 2026-10-26)**
+- **Parser:** hand-written instead of peggy. The format is line-based, so a small tokenizer and parser are enough and avoid a codegen step. Errors carry `line:col`.
+- **Core ops:** the core set is `add`, `update` (with style and hints merged; `null` removes), `remove` (cascades to edges, groups and relative dependents), `reorder` (`after`), `replace` (kind change under the same id) and `board` (title and default style). The named ops the LLM will use in phase 5 (`move`, `restyle` and so on) will be thin wrappers over these. `commit()` applies a list atomically, checks integrity, and returns inverse ops.
+- **Relative placement is live:** `below(api,80)` follows `api` when it moves. Dragging or resizing a dependent pins it to `at(x,y)`.
+- **Compiler and decompiler:**
+  - `compileBoard` is our own deterministic compiler: stable ids, seeds from an id hash, labels as `<id>~label`, our own arrow routing.
+  - `diffScene` compares the live Excalidraw scene against `compileBoard(board)`, so an untouched scene produces no ops.
+  - Hand-drawn elements keep Excalidraw's id, unless it isn't a valid identifier; then it gets an `x` prefix.
+- **Layout:** `placeUnplaced` (ELK, layered) writes absolute positions for new unplaced nodes. Phase 5 calls it after AI ops.
+- **Canvas sync:**
+  - Board changes are pushed into Excalidraw with `captureUpdate: NEVER`.
+  - Edits made on the canvas are diffed after each gesture ends, and are ignored when they're our own render (tracked with `hashElementsVersion`).
+  - The board is passed as `initialData`, and the first scene Excalidraw reports becomes the baseline (otherwise its async init reads as "delete everything").
+- **Persistence:** the board is autosaved as DSL text in IndexedDB. The phase 1 raw-scene autosave is migrated once through the decompiler.
+- **Not yet:** `cylinder` and `frame` shapes, template ports (parsed, not used), image file bytes (phase 6).
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.
