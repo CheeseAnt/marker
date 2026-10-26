@@ -169,6 +169,8 @@ export interface TranslateContext {
   images?: Map<string, { width: number; height: number }>
   /** Where to put an image the model gave no place: next to this element. */
   anchor?: Id
+  /** Otherwise, centred here (the middle of the view). */
+  center?: { x: number; y: number }
 }
 
 /** Largest side of an image placed without a size. */
@@ -331,8 +333,11 @@ export function toCoreOps(board: Board, llmOps: LlmOp[], ctx: TranslateContext =
         known.set(o.id, 'image')
         const fit = Math.min(1, IMAGE_DEFAULT_SIDE / Math.max(natural.width, natural.height, 1))
         const size = o.size ?? { w: Math.round(natural.width * fit) || IMAGE_DEFAULT_SIDE, h: Math.round(natural.height * fit) || IMAGE_DEFAULT_SIDE }
-        const anchor = ctx.anchor ?? [...board.elements].reverse().find((e) => e.kind === 'node' || e.kind === 'text' || e.kind === 'image' || e.kind === 'instance')?.id
-        const position: Placement = o.place ? toPlacement(o.place) : anchor ? { kind: 'rel', dir: 'right', of: anchor, gap: 60 } : { kind: 'at', x: 0, y: 0 }
+        const position: Placement = o.place
+          ? toPlacement(o.place)
+          : ctx.anchor
+            ? { kind: 'rel', dir: 'right', of: ctx.anchor, gap: 60 }
+            : { kind: 'at', x: Math.round((ctx.center?.x ?? 0) - size.w / 2), y: Math.round((ctx.center?.y ?? 0) - size.h / 2) }
         ops.push({ op: 'add', element: { ...empty, kind: 'image', id: o.id, asset: o.asset, at: position, size } })
         break
       }

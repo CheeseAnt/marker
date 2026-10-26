@@ -240,6 +240,22 @@ describe('attachments', () => {
     })
   })
 
+  it('centres an image in the view when nothing is selected, and tells the model what is visible', async () => {
+    const { provider, requests } = scripted([edit('Placed the logo', [{ op: 'add_image', id: 'logo', asset: 'abc123' }])])
+    const result = await runEdit({
+      prompt: 'add this logo',
+      provider,
+      getBoard: () => board,
+      getHistory: () => emptyHistory(),
+      selection: [],
+      attachments: [logo],
+      viewport: { x: 1000, y: 500, w: 800, h: 600 },
+    })
+    expect(JSON.stringify(requests[0].messages[0].content)).toContain('The user is looking at x 1000 to 1800, y 500 to 1100 (centre 1400,800).')
+    if (result.kind !== 'edit') throw new Error()
+    expect(commit(board, result.ops).board.elements.find((e) => e.id === 'logo')).toMatchObject({ at: { kind: 'at', x: 1240, y: 720 } })
+  })
+
   it('only places images that were attached', () => {
     const { issues } = toCoreOps(board, [{ op: 'add_image', id: 'x', asset: 'nope' }], { templates: [], images: new Map([['abc123', { width: 1, height: 1 }]]) })
     expect(issues).toEqual(['ops[0] (add_image "x"): there is no attached image "nope" (attached: abc123)'])

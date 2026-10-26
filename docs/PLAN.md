@@ -450,6 +450,12 @@ recording → transcribing → queued → building context → calling model →
 - **Testing:** Chrome's fake microphone plays `e2e/fixtures/speech.wav` (made with macOS `say`). The remote and tap/hold flows are tested with a mocked Azure; the real on-device run is opt-in with `BOARDBOT_SPEECH_E2E=1`, because it downloads the model.
 - **Later:** Whisper's vocabulary prompt from board labels, and Chrome's on-device `processLocally` for browser speech. Vite also emits its own unused 27 MB copy of the ORT WASM file in `dist/`, to trim in phase 10.
 
+**Phase 8: job queue (done, 2026-10-26)**
+- **Concurrency:** up to `settings.jobConcurrency` (default 2) requests are worked out at once. Applying is synchronous, so changes land one at a time, in the order they finish.
+- **Changes in between:** if the board changes while a request is being worked out, the orchestrator checks against the latest board and sends any problems back as a normal correction round. If another change lands between that check and the apply (during layout), or `undo_first` no longer matches the newest changes, the queue redoes the request once against the new board (`ConflictError`, marked "redoing on the changed board").
+- **Queue panel:** opened from the strip's request summary ("Working out “…” 4 s, 120 tokens, 2 more"). It lists working requests (with a sweeping marker progress stroke), waiting ones and finished ones (title, reply or error; time, duration, tokens; Spoken), with Cancel, Try again and Clear finished.
+- **Placement fix (requested):** requests carry the visible area. Unconnected new elements are centred in the view, at the nearest free spot (ring search), instead of right of the board or at (0,0). Images without a place or selection are centred too, and the model is told the visible bounds and centre.
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

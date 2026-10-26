@@ -8,6 +8,15 @@ export interface CanvasBridge {
   highlightAfterRender: (ids: Id[]) => void
   /** The scene point at the middle of the visible canvas. */
   viewportCenter: () => { x: number; y: number }
+  /** The visible part of the scene, in scene coordinates. */
+  viewport: () => Viewport
+}
+
+export interface Viewport {
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 let bridge: CanvasBridge | null = null
@@ -26,4 +35,8 @@ export function highlightAfterRender(ids: Id[]) {
 
 export function viewportCenter(): { x: number; y: number } {
   return bridge?.viewportCenter() ?? { x: 0, y: 0 }
+}
+
+export function viewport(): Viewport | undefined {
+  return bridge?.viewport()
 }

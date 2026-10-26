@@ -50,6 +50,8 @@ export interface EditRequest {
   templates?: TemplateVersion[]
   /** Images sent with the request; the model can see them and place them with add_image. */
   attachments?: Attachment[]
+  /** The visible part of the board when the request was made. */
+  viewport?: { x: number; y: number; w: number; h: number }
   signal?: AbortSignal
   onStage?: (stage: EditStage, detail: { outputTokens: number; repair: number }) => void
 }
@@ -85,7 +87,11 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
   if (attachments.length && !req.provider.capabilities.vision) {
     throw new ProviderError('config', `${req.provider.label} can't look at images. Remove the attachments, or choose a model that can.`)
   }
-  const context = buildContext({ board: req.getBoard(), selection: req.selection, recent: req.recent, templates: req.templates, attachments }, req.prompt)
+  const context = buildContext(
+    { board: req.getBoard(), selection: req.selection, recent: req.recent, templates: req.templates, attachments, viewport: req.viewport },
+    req.prompt,
+  )
+  const center = req.viewport && req.viewport.w > 0 ? { x: req.viewport.x + req.viewport.w / 2, y: req.viewport.y + req.viewport.h / 2 } : undefined
   const messages: ChatMessage[] = [
     {
       role: 'user',
@@ -161,7 +167,7 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
       if (!(e instanceof OpError)) throw e
       throw new ProviderError('bad-request', `Couldn't undo the last ${undoCount === 1 ? 'change' : `${undoCount} changes`}: ${e.issues[0]}`)
     }
-    const { ops, issues } = toCoreOps(board, parsed.data.ops, { templates: req.templates ?? [], images, anchor: req.selection[0] })
+    const { ops, issues } = toCoreOps(board, parsed.data.ops, { templates: req.templates ?? [], images, anchor: req.selection[0], center })
     if (issues.length) {
       problems(issues)
       continue
@@ -178,7 +184,7 @@ export async function runEdit(req: EditRequest): Promise<EditResult> {
     }
 
     req.onStage?.('placing', { outputTokens: usage.outputTokens, repair })
-    const layout = ops.length ? await placeUnplaced(applied) : []
+    const layout = ops.length ? await placeUnplaced(applied, { center }) : []
     const all = [...ops, ...layout]
     return { kind: 'edit', undo: { txIds }, ops: all, title: parsed.data.summary, changedIds: touchedIds(all), usage, repairs: repair }
   }

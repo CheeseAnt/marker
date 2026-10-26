@@ -48,6 +48,8 @@ export interface ContextInput {
   board: Board
   selection: Id[]
   attachments?: Attachment[]
+  /** The visible part of the board, so new things land where the user is looking. */
+  viewport?: { x: number; y: number; w: number; h: number }
   /** Templates the model may add, newest version of each. */
   templates?: TemplateVersion[]
   /** Recent conversation and changes, already formatted (see formatRecent). */
@@ -96,7 +98,7 @@ export function templateCatalog(board: Board, templates: TemplateVersion[]): str
   return `Templates you can add with add_copy:\n${lines.join('\n')}`
 }
 
-export function buildContext({ board, selection, recent, templates = [], attachments = [] }: ContextInput, request: string): string {
+export function buildContext({ board, selection, recent, templates = [], attachments = [], viewport }: ContextInput, request: string): string {
   const full = printBoard(board, { hints: false, definitions: false })
   let boardText = full
   if (full.length > FULL_BOARD_CHAR_LIMIT) {
@@ -122,10 +124,14 @@ export function buildContext({ board, selection, recent, templates = [], attachm
     ].join('\n')
   }
   const selected = selection.length ? `Selected: ${selection.join(', ')}` : 'Nothing is selected.'
+  const view =
+    viewport && viewport.w > 0
+      ? `\nThe user is looking at x ${Math.round(viewport.x)} to ${Math.round(viewport.x + viewport.w)}, y ${Math.round(viewport.y)} to ${Math.round(viewport.y + viewport.h)} (centre ${Math.round(viewport.x + viewport.w / 2)},${Math.round(viewport.y + viewport.h / 2)}). Unconnected new things are centred there automatically when you leave out place.`
+      : ''
   const images = attachments.length
     ? `\nAttached images, in the order they follow: ${attachments.map((a, i) => `${i + 1}. "${a.label}" (asset ${a.assetId}, ${a.width}x${a.height})`).join('; ')}. Place one on the board with add_image.`
     : ''
   const history = recent ? `${recent}\n\n` : ''
   const catalog = templateCatalog(board, templates)
-  return `${history}${catalog ? `${catalog}\n\n` : ''}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}${images}\n\nRequest: ${request}`
+  return `${history}${catalog ? `${catalog}\n\n` : ''}Current board:\n\`\`\`\n${boardText.trimEnd()}\n\`\`\`\n${selected}${view}${images}\n\nRequest: ${request}`
 }

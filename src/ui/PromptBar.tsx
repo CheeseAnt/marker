@@ -7,7 +7,7 @@ import { useToast } from '../state/toast'
 import { parseShortcut, matchesShortcut } from '../speech/shortcut'
 import { onTranscript, useVoice } from '../speech/voice'
 import { useSettings } from '../settings/store'
-import { canvasSelection } from '../state/canvasBridge'
+import { canvasSelection, viewport } from '../state/canvasBridge'
 
 function MicIcon() {
   return (
@@ -64,6 +64,7 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     useJobs.getState().submit(prompt.trim(), {
       source,
       selection: canvasSelection(),
+      viewport: viewport(),
       attachments: attached.map((a) => ({ assetId: a.asset.id, label: a.name })),
     })
     setText('')

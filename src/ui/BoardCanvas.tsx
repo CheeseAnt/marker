@@ -171,6 +171,12 @@ export function BoardCanvas({ onError }: Props) {
         const { width, height, scrollX, scrollY, zoom } = api.getAppState()
         return { x: width / 2 / zoom.value - scrollX, y: height / 2 / zoom.value - scrollY }
       },
+      viewport: () => {
+        const api = apiRef.current
+        if (!api) return { x: 0, y: 0, w: 0, h: 0 }
+        const { width, height, scrollX, scrollY, zoom } = api.getAppState()
+        return { x: -scrollX, y: -scrollY, w: width / zoom.value, h: height / zoom.value }
+      },
     })
     return () => registerCanvas(null)
   }, [])

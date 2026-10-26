@@ -93,11 +93,37 @@ function anchorFor(board: Board, comp: Set<Id>, placed: Map<Id, Box>): Box | und
 }
 
 /**
- * Gives every node or text without a placement an absolute position: each connected group
- * of new elements is laid out together, then put below whatever it connects to (or right of
- * the board), nudged until it overlaps nothing. Returns ops so the result is saved and undoable.
+ * The free spot nearest `ideal` for a block, searching outward in rings: the block lands as
+ * close as possible to where it was meant to go without overlapping anything.
  */
-export async function placeUnplaced(board: Board): Promise<Op[]> {
+function nearestFree(ideal: { x: number; y: number }, collides: (o: { x: number; y: number }) => boolean) {
+  if (!collides(ideal)) return ideal
+  for (let ring = 1; ring <= MAX_NUDGES; ring++) {
+    const step = ring * 40
+    const candidates: { x: number; y: number }[] = []
+    for (let k = -ring; k <= ring; k++) {
+      candidates.push({ x: ideal.x + k * 40, y: ideal.y - step }, { x: ideal.x + k * 40, y: ideal.y + step })
+      candidates.push({ x: ideal.x - step, y: ideal.y + k * 40 }, { x: ideal.x + step, y: ideal.y + k * 40 })
+    }
+    candidates.sort((a, b) => Math.hypot(a.x - ideal.x, a.y - ideal.y) - Math.hypot(b.x - ideal.x, b.y - ideal.y))
+    const free = candidates.find((c) => !collides(c))
+    if (free) return free
+  }
+  return ideal
+}
+
+export interface PlaceOptions {
+  /** Where new elements that connect to nothing should go, normally the middle of the view. */
+  center?: { x: number; y: number }
+}
+
+/**
+ * Gives every node or text without a placement an absolute position: each connected group
+ * of new elements is laid out together, then put below whatever it connects to, or in the
+ * middle of the view (else right of the board), nudged until it overlaps nothing. Returns ops
+ * so the result is saved and undoable.
+ */
+export async function placeUnplaced(board: Board, opts: PlaceOptions = {}): Promise<Op[]> {
   const unplaced = new Set(board.elements.filter(isUnplaced).map((e) => e.id))
   if (unplaced.size === 0) return []
   const resolved = resolveBoxes(board)
@@ -115,15 +141,18 @@ export async function placeUnplaced(board: Board): Promise<Op[]> {
     const block = await layoutBlock(board, comp)
     const anchor = anchorFor(board, new Set(comp), placed)
     const content = unionBoxes([...placed.values()])
-    let origin = anchor
-      ? { x: anchor.x + anchor.w / 2 - block.w / 2, y: anchor.y + anchor.h + ANCHOR_GAP }
-      : content
-        ? { x: content.x + content.w + ANCHOR_GAP * 1.5, y: content.y }
-        : { x: 0, y: 0 }
     const collides = (o: { x: number; y: number }) =>
       [...block.boxes.values()].some((b) => [...placed.values()].some((p) => overlaps({ ...b, x: b.x + o.x, y: b.y + o.y }, p)))
-    for (let i = 0; i < MAX_NUDGES && collides(origin); i++) {
-      origin = anchor ? { x: origin.x + 40, y: origin.y } : { x: origin.x, y: origin.y + 40 }
+    let origin: { x: number; y: number }
+    if (anchor) {
+      origin = { x: anchor.x + anchor.w / 2 - block.w / 2, y: anchor.y + anchor.h + ANCHOR_GAP }
+      // Below its neighbour, sliding right if that space is taken.
+      for (let i = 0; i < MAX_NUDGES && collides(origin); i++) origin = { x: origin.x + 40, y: origin.y }
+    } else if (opts.center) {
+      origin = nearestFree({ x: opts.center.x - block.w / 2, y: opts.center.y - block.h / 2 }, collides)
+    } else {
+      origin = content ? { x: content.x + content.w + ANCHOR_GAP * 1.5, y: content.y } : { x: 0, y: 0 }
+      for (let i = 0; i < MAX_NUDGES && collides(origin); i++) origin = { x: origin.x, y: origin.y + 40 }
     }
     for (const id of comp) {
       const b = block.boxes.get(id)!
