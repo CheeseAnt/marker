@@ -1,6 +1,9 @@
 # --- Stage 1: Build the SPA ---
 FROM node:22-alpine AS builder
 
+ARG PUBLIC_URL=/
+ENV VITE_PUBLIC_URL=$PUBLIC_URL
+
 WORKDIR /app
 
 # Copy package management files first for efficient caching
