@@ -1,4 +1,5 @@
-import workletUrl from './recorder.worklet.js?url'
+// Kept a real file: the content security policy refuses inlined (data:) scripts.
+import workletUrl from './recorder.worklet.js?url&no-inline'
 
 /** Speech models expect 16 kHz mono. */
 export const SPEECH_SAMPLE_RATE = 16_000

@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BoardBot</title>
-    <script>window.EXCALIDRAW_ASSET_PATH = "/"</script>
+    <!-- Runs before the app's modules, which is when Excalidraw registers its fonts. -->
+    <script src="/asset-path.js"></script>
   </head>
   <body>
     <div id="root"></div>

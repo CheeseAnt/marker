@@ -52,8 +52,55 @@ function ortRuntime(): Plugin {
   }
 }
 
+/**
+ * The content security policy for built pages: only this app's own code runs, and it only talks to
+ * Azure (models) and Hugging Face (speech model downloads). The dev server needs inline scripts for
+ * hot reload, so it goes without.
+ */
+const CSP = [
+  "default-src 'self'",
+  // WASM compilation and blob: modules are how ONNX Runtime starts in the speech worker.
+  "script-src 'self' 'wasm-unsafe-eval' blob:",
+  "worker-src 'self' blob:",
+  "connect-src 'self' data: blob: https://*.openai.azure.com https://*.services.ai.azure.com https://*.cognitiveservices.azure.com https://huggingface.co https://*.huggingface.co https://*.hf.co",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "media-src 'self' data: blob:",
+  // Excalidraw and React position things with inline styles.
+  "style-src 'self' 'unsafe-inline'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ')
+
+/**
+ * Excalidraw lists a CDN (esm.sh) as the second source of every font face. Our fonts are served
+ * locally, but under the content security policy Chrome still tries, and is refused, the CDN for
+ * every face. This points that fallback at this app instead, so the build never contacts a CDN.
+ */
+function excalidrawFontFallback(): Plugin {
+  // The URL is a template literal with another template nested inside it, so match lazily up to its end.
+  const FALLBACK = /`https:\/\/esm\.sh\/\$\{.*?\}\/dist\/prod\/`/s
+  return {
+    name: 'boardbot-excalidraw-font-fallback',
+    apply: 'build',
+    transform(code, id) {
+      if (!id.includes('@excalidraw/excalidraw') || !FALLBACK.test(code)) return undefined
+      return { code: code.replace(FALLBACK, '`${location.origin}/`'), map: null }
+    },
+  }
+}
+
+function contentSecurityPolicy(): Plugin {
+  return {
+    name: 'boardbot-csp',
+    apply: 'build',
+    transformIndexHtml: () => [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' }],
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), ortRuntime()],
+  plugins: [react(), ortRuntime(), contentSecurityPolicy(), excalidrawFontFallback()],
   server: { headers: isolationHeaders },
   // Pre-bundled up front, so the first use of voice doesn't make the dev server reload the page.
   optimizeDeps: { include: ['@huggingface/transformers'] },
