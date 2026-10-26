@@ -15,7 +15,7 @@ test('prices set in Settings cost each request, shown in the strip, the usage ta
 
   // A few earlier days, so the chart has something to show.
   await page.evaluate(() => {
-    const { useUsage } = (window as unknown as { __boardbot: { useUsage: { getState(): { add(r: unknown): void } } } }).__boardbot
+    const { useUsage } = (window as unknown as { __marker: { useUsage: { getState(): { add(r: unknown): void } } } }).__marker
     const day = 24 * 3600 * 1000
     ;[[9, 0.21], [6, 0.08], [5, 0.4], [2, 0.12], [1, 0.33]].forEach(([ago, cost]) =>
       useUsage.getState().add({ ts: Date.now() - ago * day, kind: 'chat', provider: 'azure-foundry', deployment: 'gpt-5.6-luna', inputTokens: 90_000, outputTokens: 6_000, cost }),

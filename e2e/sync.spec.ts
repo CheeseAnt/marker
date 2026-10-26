@@ -10,8 +10,8 @@ text t1 "hand-drawn notes" at(480,160)
 
 const boardText = (page: Page) =>
   page.evaluate(() => {
-    const w = window as unknown as { __boardbot: { useBoard: { getState(): { board: unknown; revision: number } } } }
-    return w.__boardbot.useBoard.getState()
+    const w = window as unknown as { __marker: { useBoard: { getState(): { board: unknown; revision: number } } } }
+    return w.__marker.useBoard.getState()
   })
 
 async function applyText(page: Page, text: string) {

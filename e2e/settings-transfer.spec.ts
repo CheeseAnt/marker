@@ -6,7 +6,7 @@ test('export settings without the key, import them into a fresh app, and only th
   await page.evaluate(() => {
     localStorage.clear()
     localStorage.setItem(
-      'boardbot.settings',
+      'marker.settings',
       JSON.stringify({
         providers: { 'azure-foundry': { endpoint: 'https://res.openai.azure.com', deployment: 'gpt-5.6-luna', transcriptionDeployment: 'gpt-4o-transcribe' } },
         voice: { mode: 'remote', autoSend: true },
@@ -14,7 +14,7 @@ test('export settings without the key, import them into a fresh app, and only th
         budget: { warnAt: 5, limit: 20 },
       }),
     )
-    localStorage.setItem('boardbot.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'my-real-key-abc' } }))
+    localStorage.setItem('marker.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'my-real-key-abc' } }))
   })
   await page.reload()
   await page.locator('.excalidraw').waitFor()
@@ -26,7 +26,7 @@ test('export settings without the key, import them into a fresh app, and only th
   await dialog.getByRole('button', { name: 'Export settings' }).click()
   const saved = await (await download).path()
   const text = readFileSync(saved, 'utf8')
-  expect(JSON.parse(text)).toMatchObject({ schema: 'boardbot-settings', version: 1, settings: { voice: { mode: 'remote' }, budget: { limit: 20 } } })
+  expect(JSON.parse(text)).toMatchObject({ schema: 'marker-settings', version: 1, settings: { voice: { mode: 'remote' }, budget: { limit: 20 } } })
   expect(text).not.toContain('my-real-key-abc')
   await dialog.getByRole('button', { name: 'Cancel' }).click()
 
@@ -52,7 +52,7 @@ test('export settings without the key, import them into a fresh app, and only th
   await dialog.getByRole('button', { name: 'Save' }).click()
 
   await expect(page.getByRole('button', { name: 'Azure AI Foundry needs an API key' })).toBeVisible()
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('boardbot.settings')!))
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('marker.settings')!))
   expect(stored).toMatchObject({ jobConcurrency: 2, budget: { warnAt: 5, limit: 20 }, voice: { autoSend: true } })
 
   // A file that isn't settings is explained, not imported.
@@ -60,5 +60,5 @@ test('export settings without the key, import them into a fresh app, and only th
   const chooser2 = page.waitForEvent('filechooser')
   await dialog.getByRole('button', { name: 'Import settings…' }).click()
   await (await chooser2).setFiles({ name: 'board.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') })
-  await expect(dialog.getByRole('alert')).toHaveText("This file isn't a BoardBot settings file.")
+  await expect(dialog.getByRole('alert')).toHaveText("This file isn't a Marker settings file.")
 })

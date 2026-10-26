@@ -58,7 +58,7 @@ test('configure Azure, test the connection, save, and focus the prompt with /', 
   await dialog.getByRole('button', { name: 'Save' }).click()
   await expect(dialog).toBeHidden()
   await expect(page.getByRole('button', { name: 'Azure AI Foundry: gpt-5.6-luna' })).toBeVisible()
-  const stored = await page.evaluate(() => ({ settings: localStorage.getItem('boardbot.settings'), secrets: localStorage.getItem('boardbot.secrets') }))
+  const stored = await page.evaluate(() => ({ settings: localStorage.getItem('marker.settings'), secrets: localStorage.getItem('marker.secrets') }))
   expect(stored.settings).not.toContain('test-key-123')
   expect(stored.secrets).toContain('test-key-123')
 

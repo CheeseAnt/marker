@@ -7,7 +7,7 @@ const WIDE = readFileSync(new URL('./fixtures/wide.png', import.meta.url))
 type Img = { id: string; kind: string; asset?: string; size?: { w: number; h: number } }
 const elements = (page: Page) =>
   page.evaluate(
-    () => (window as unknown as { __boardbot: { useBoard: { getState(): { board: { elements: unknown[] } } } } }).__boardbot.useBoard.getState().board.elements,
+    () => (window as unknown as { __marker: { useBoard: { getState(): { board: { elements: unknown[] } } } } }).__marker.useBoard.getState().board.elements,
   ) as Promise<Img[]>
 
 /** Drops the fixture onto an element, the way a file dragged from the desktop arrives. */
@@ -45,7 +45,7 @@ test('dropped images are kept with the board and survive a reload', async ({ pag
   await expect.poll(async () => (await elements(page)).find((e) => e.kind === 'image')?.asset).toBe(image.asset)
   // The bytes come back from storage, so the canvas has the file to draw.
   await expect
-    .poll(() => page.evaluate((id) => !!document.querySelector('.excalidraw') && (window as unknown as { __boardbotFiles?: () => string[] }).__boardbotFiles?.().includes(id), image.asset!))
+    .poll(() => page.evaluate((id) => !!document.querySelector('.excalidraw') && (window as unknown as { __markerFiles?: () => string[] }).__markerFiles?.().includes(id), image.asset!))
     .toBe(true)
   expect(errors).toEqual([])
 })

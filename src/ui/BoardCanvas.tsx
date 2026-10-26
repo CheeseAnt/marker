@@ -265,7 +265,7 @@ export function BoardCanvas({ onError }: Props) {
           apiRef.current = api
           void loadImages(api)
           // Lets end-to-end tests check which image files the canvas has.
-          if (import.meta.env.DEV) Object.assign(window, { __boardbotFiles: () => Object.keys(api.getFiles()) })
+          if (import.meta.env.DEV) Object.assign(window, { __markerFiles: () => Object.keys(api.getFiles()) })
           // Text is measured when rendered; a font that arrives later would leave it clipped.
           // Load every preset face, then render again so all text is measured in its real font.
           Promise.all(FONT_PRESETS.map((f) => document.fonts.load(`20px "${f.css}"`)))

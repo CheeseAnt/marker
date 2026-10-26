@@ -125,8 +125,8 @@ function ShortcutField({ label, value, fallback, onChange }: { label: string; va
           </button>
         )}
       </div>
-      {!valid && <p className="field-hint error">That isn't a key combination BoardBot understands.</p>}
-      {conflict && <p className="field-hint error">{value} is already used for {conflict}, so it may not reach BoardBot.</p>}
+      {!valid && <p className="field-hint error">That isn't a key combination Marker understands.</p>}
+      {conflict && <p className="field-hint error">{value} is already used for {conflict}, so it may not reach Marker.</p>}
     </div>
   )
 }

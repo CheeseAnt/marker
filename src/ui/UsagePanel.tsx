@@ -140,7 +140,7 @@ function downloadCsv(text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `boardbot-usage-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `marker-usage-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

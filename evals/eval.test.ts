@@ -2,8 +2,8 @@
  * Model evals. By default each case replays its recorded answers (evals/recordings), so the run is
  * deterministic and free; cases without a recording are skipped. To record against a real model:
  *
- *   BOARDBOT_EVAL_LIVE=1 BOARDBOT_AZURE_ENDPOINT=https://<res>.openai.azure.com \
- *   BOARDBOT_AZURE_DEPLOYMENT=<name> BOARDBOT_AZURE_KEY=<key> npm run eval:live
+ *   MARKER_EVAL_LIVE=1 MARKER_AZURE_ENDPOINT=https://<res>.openai.azure.com \
+ *   MARKER_AZURE_DEPLOYMENT=<name> MARKER_AZURE_KEY=<key> npm run eval:live
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -15,7 +15,7 @@ import { emptyHistory } from '../src/history/history'
 import { commit } from '../src/model/apply'
 import { CASES } from './cases'
 
-const LIVE = process.env.BOARDBOT_EVAL_LIVE === '1'
+const LIVE = process.env.MARKER_EVAL_LIVE === '1'
 
 interface Recording {
   caseId: string
@@ -62,11 +62,11 @@ describe('model evals', () => {
       const provider = LIVE
         ? recording(
             createAzureFoundryProvider({
-              endpoint: process.env.BOARDBOT_AZURE_ENDPOINT ?? '',
-              deployment: process.env.BOARDBOT_AZURE_DEPLOYMENT ?? '',
+              endpoint: process.env.MARKER_AZURE_ENDPOINT ?? '',
+              deployment: process.env.MARKER_AZURE_DEPLOYMENT ?? '',
               endpointStyle: 'auto',
-              apiVersion: process.env.BOARDBOT_AZURE_API_VERSION ?? '',
-              apiKey: process.env.BOARDBOT_AZURE_KEY ?? '',
+              apiVersion: process.env.MARKER_AZURE_API_VERSION ?? '',
+              apiKey: process.env.MARKER_AZURE_KEY ?? '',
             }),
             responses,
           )

@@ -1,10 +1,10 @@
 import { del, get, set, setMany } from 'idb-keyval'
 
-const BOARD_KEY = 'boardbot.board.v1'
-const HISTORY_KEY = 'boardbot.history.v1'
+const BOARD_KEY = 'marker.board.v1'
+const HISTORY_KEY = 'marker.history.v1'
 // Phase 1 autosaved the raw Excalidraw scene; it is migrated once and then deleted.
-const LEGACY_SCENE_KEY = 'boardbot.scene.v0'
-const CORRUPT_KEY = 'boardbot.board.corrupt'
+const LEGACY_SCENE_KEY = 'marker.scene.v0'
+const CORRUPT_KEY = 'marker.board.corrupt'
 
 export async function loadBoardText(): Promise<string | undefined> {
   try {

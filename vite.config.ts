@@ -25,7 +25,7 @@ const ORT_FILE = 'ort-wasm-simd-threaded.asyncify'
 function ortRuntime(): Plugin {
   let serving = false
   return {
-    name: 'boardbot-ort-runtime',
+    name: 'marker-ort-runtime',
     configResolved(config) {
       serving = config.command === 'serve'
     },
@@ -83,7 +83,7 @@ function excalidrawFontFallback(): Plugin {
   // The URL is a template literal with another template nested inside it, so match lazily up to its end.
   const FALLBACK = /`https:\/\/esm\.sh\/\$\{.*?\}\/dist\/prod\/`/s
   return {
-    name: 'boardbot-excalidraw-font-fallback',
+    name: 'marker-excalidraw-font-fallback',
     apply: 'build',
     transform(code, id) {
       if (!id.includes('@excalidraw/excalidraw') || !FALLBACK.test(code)) return undefined
@@ -94,7 +94,7 @@ function excalidrawFontFallback(): Plugin {
 
 function contentSecurityPolicy(): Plugin {
   return {
-    name: 'boardbot-csp',
+    name: 'marker-csp',
     apply: 'build',
     transformIndexHtml: () => [{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' }],
   }
@@ -122,8 +122,8 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       manifest: {
-        name: 'BoardBot',
-        short_name: 'BoardBot',
+        name: 'Marker',
+        short_name: 'Marker',
         description: 'A hand-drawn whiteboard you edit by describing changes, typed or spoken.',
         theme_color: '#f6f7f5',
         background_color: '#f6f7f5',

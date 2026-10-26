@@ -42,8 +42,13 @@ registerRoute(
 // Fonts and the speech runtime are large and rarely all needed, so they're kept once fetched.
 registerRoute(
   ({ url }) => url.origin === self.location.origin && (url.pathname.startsWith('/fonts/') || url.pathname.endsWith('.wasm')),
-  new CacheFirst({ cacheName: 'boardbot-large', plugins: [new ExpirationPlugin({ maxEntries: 400 }), isolate] }),
+  new CacheFirst({ cacheName: 'marker-large', plugins: [new ExpirationPlugin({ maxEntries: 400 }), isolate] }),
 )
+
+// The large-file cache was named after BoardBot, the app's old name.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(caches.delete('boardbot-large'))
+})
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') void self.skipWaiting()

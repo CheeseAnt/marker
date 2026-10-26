@@ -27,7 +27,7 @@ let opened: ReturnType<typeof createStore> | null = null
 /** The records store, opened on first use; undefined where the browser has no IndexedDB. */
 function store() {
   if (typeof indexedDB === 'undefined') return undefined
-  opened ??= createStore('boardbot-usage', 'records')
+  opened ??= createStore('marker-usage', 'records')
   return opened
 }
 let counter = 0

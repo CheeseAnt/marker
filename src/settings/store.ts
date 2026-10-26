@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { settingsSchema, type ProviderId, type Secrets, type Settings } from './schema'
 
-const SETTINGS_KEY = 'boardbot.settings'
-const SECRETS_KEY = 'boardbot.secrets'
+const SETTINGS_KEY = 'marker.settings'
+const SECRETS_KEY = 'marker.secrets'
 
 function readJson(key: string): unknown {
   try {

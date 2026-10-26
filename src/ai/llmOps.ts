@@ -30,7 +30,7 @@ const placeSchema = z
     }),
     z.object({ x: z.number(), y: z.number() }).describe('Absolute top-left position. Prefer relative placement.'),
   ])
-  .describe('Where to put the element. Omit to let BoardBot lay it out next to what it connects to.')
+  .describe('Where to put the element. Omit to let Marker lay it out next to what it connects to.')
 
 const sizeSchema = z.object({ w: z.number().positive(), h: z.number().positive() })
 

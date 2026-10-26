@@ -10,7 +10,7 @@ edge e1 api -> db "queries"
 type State = { board: { elements: { id: string; at?: { x: number } }[] }; history: { past: { title: string }[]; future: unknown[] } }
 
 const state = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __boardbot: { useBoard: { getState(): unknown } } }).__boardbot.useBoard.getState()) as Promise<State>
+  page.evaluate(() => (window as unknown as { __marker: { useBoard: { getState(): unknown } } }).__marker.useBoard.getState()) as Promise<State>
 
 const apiX = async (page: Page) => (await state(page)).board.elements.find((e) => e.id === 'api')?.at?.x
 

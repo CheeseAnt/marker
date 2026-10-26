@@ -6,7 +6,7 @@ const WIDE = readFileSync(new URL('./fixtures/wide.png', import.meta.url))
 
 type State = { board: { title: string; elements: { id: string; kind: string; asset?: string; label?: string }[] }; history: { past: unknown[] } }
 const state = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __boardbot: { useBoard: { getState(): unknown } } }).__boardbot.useBoard.getState()) as Promise<State>
+  page.evaluate(() => (window as unknown as { __marker: { useBoard: { getState(): unknown } } }).__marker.useBoard.getState()) as Promise<State>
 
 test('save a board with its image and history, start afresh, and open it again', async ({ page }) => {
   // Use the download and file-input fallback; native pickers can't be driven from tests.
@@ -62,7 +62,7 @@ test('save a board with its image and history, start afresh, and open it again',
   expect(opened.history.past.length).toBeGreaterThan(0)
   const image = opened.board.elements.find((e) => e.kind === 'image')!
   await expect
-    .poll(() => page.evaluate((id) => (window as unknown as { __boardbotFiles?: () => string[] }).__boardbotFiles?.().includes(id), image.asset!))
+    .poll(() => page.evaluate((id) => (window as unknown as { __markerFiles?: () => string[] }).__markerFiles?.().includes(id), image.asset!))
     .toBe(true)
   await page.waitForTimeout(500)
   await page.screenshot({ path: 'e2e/screenshots/file-opened.png' })

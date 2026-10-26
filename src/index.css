@@ -1,5 +1,5 @@
 /*
- * BoardBot chrome. The canvas is the hero; the only bold element is the marker ledge,
+ * Marker chrome. The canvas is the hero; the only bold element is the marker ledge,
  * where requests are written in the board's own handwriting.
  */
 :root {
@@ -16,7 +16,7 @@
   --font-ui: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
   /* Registered by Excalidraw from the self-hosted fonts in public/fonts. */
   --font-hand: 'Excalifont', 'Comic Shanns', 'Comic Sans MS', cursive;
-  --font-code: 'BoardBot Code', 'Cascadia Code', ui-monospace, monospace;
+  --font-code: 'Marker Code', 'Cascadia Code', ui-monospace, monospace;
 
   --step--1: 0.8125rem;
   --step-0: 0.9375rem;
@@ -31,7 +31,7 @@
 
 /* Its own name: Excalidraw registers "Cascadia" itself, and two faces with one name confuse loading. */
 @font-face {
-  font-family: 'BoardBot Code';
+  font-family: 'Marker Code';
   src: url('/fonts/Cascadia/CascadiaCode-Regular.woff2') format('woff2');
   font-display: swap;
 }
@@ -121,7 +121,7 @@ button {
   }
 }
 
-/* History is owned by BoardBot, not Excalidraw (plan §2). */
+/* History is owned by Marker, not Excalidraw (plan §2). */
 .canvas .undo-redo-buttons {
   display: none;
 }

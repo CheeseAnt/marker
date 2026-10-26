@@ -10,7 +10,7 @@ export interface Asset {
   created: number
 }
 
-const key = (id: string) => `boardbot.asset.${id}`
+const key = (id: string) => `marker.asset.${id}`
 const cache = new Map<string, Asset>()
 
 export async function loadAsset(id: string): Promise<Asset | undefined> {

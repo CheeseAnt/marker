@@ -1,5 +1,5 @@
 /**
- * The subset of Excalidraw's element shape that BoardBot reads and writes. Kept structural
+ * The subset of Excalidraw's element shape that Marker reads and writes. Kept structural
  * (no branded types) so compile/decompile stay pure and testable without Excalidraw loaded.
  */
 export interface ExBinding {

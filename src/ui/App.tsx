@@ -52,7 +52,7 @@ export default function App() {
     }
   }, [onError])
 
-  // Undo and redo go through BoardBot's history, not Excalidraw's (plan §2).
+  // Undo and redo go through Marker's history, not Excalidraw's (plan §2).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return

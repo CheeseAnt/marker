@@ -17,7 +17,7 @@ type Full = {
   }
 }
 const state = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __boardbot: { useBoard: { getState(): unknown } } }).__boardbot.useBoard.getState()) as Promise<Full>
+  page.evaluate(() => (window as unknown as { __marker: { useBoard: { getState(): unknown } } }).__marker.useBoard.getState()) as Promise<Full>
 
 test('save a selection as a template, add copies, detach one, and keep it all after reload', async ({ page }) => {
   const errors: string[] = []
@@ -82,6 +82,6 @@ test('save a selection as a template, add copies, detach one, and keep it all af
   const download = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export library' }).click()
   const exported = JSON.parse(readFileSync(await (await download).path(), 'utf8'))
-  expect(exported).toMatchObject({ schema: 'boardbot-library', templates: [{ name: 'web_server', versions: [{ version: 1 }] }] })
+  expect(exported).toMatchObject({ schema: 'marker-library', templates: [{ name: 'web_server', versions: [{ version: 1 }] }] })
   expect(errors).toEqual([])
 })

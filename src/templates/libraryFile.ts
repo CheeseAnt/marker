@@ -1,7 +1,9 @@
 import { parseBoard } from '../dsl/parse'
 import type { LibraryEntry } from './library'
 
-export const LIBRARY_FILE_SCHEMA = 'boardbot-library'
+export const LIBRARY_FILE_SCHEMA = 'marker-library'
+// Files exported before the app was renamed from BoardBot.
+const LEGACY_LIBRARY_SCHEMAS: unknown[] = ['boardbot-library']
 export const LIBRARY_FILE_VERSION = 1
 
 export class LibraryFileError extends Error {}
@@ -24,11 +26,11 @@ export function parseLibraryFile(text: string): ImportedTemplate[] {
   try {
     data = JSON.parse(text)
   } catch {
-    throw new LibraryFileError("This file isn't a BoardBot template library (it isn't valid JSON).")
+    throw new LibraryFileError("This file isn't a Marker template library (it isn't valid JSON).")
   }
-  if (data?.schema !== LIBRARY_FILE_SCHEMA || !Array.isArray(data.templates)) throw new LibraryFileError("This file isn't a BoardBot template library.")
+  if ((data?.schema !== LIBRARY_FILE_SCHEMA && !LEGACY_LIBRARY_SCHEMAS.includes(data?.schema)) || !Array.isArray(data.templates)) throw new LibraryFileError("This file isn't a Marker template library.")
   if (typeof data.version !== 'number' || data.version > LIBRARY_FILE_VERSION) {
-    throw new LibraryFileError('This template library is from a newer version of BoardBot. Update BoardBot to import it.')
+    throw new LibraryFileError('This template library is from a newer version of Marker. Update Marker to import it.')
   }
   const out: ImportedTemplate[] = []
   for (const t of data.templates as { name?: unknown; versions?: unknown }[]) {

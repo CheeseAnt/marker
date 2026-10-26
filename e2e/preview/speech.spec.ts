@@ -9,7 +9,7 @@ test.use({
 
 test('the production build transcribes speech on the device', async ({ page }) => {
   await page.goto('/')
-  await page.evaluate(() => localStorage.setItem('boardbot.settings', JSON.stringify({ voice: { mode: 'on-device', onDeviceModel: 'moonshine-tiny' } })))
+  await page.evaluate(() => localStorage.setItem('marker.settings', JSON.stringify({ voice: { mode: 'on-device', onDeviceModel: 'moonshine-tiny' } })))
   await page.reload()
   await page.locator('.excalidraw').waitFor()
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true)

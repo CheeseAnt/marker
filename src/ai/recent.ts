@@ -24,7 +24,7 @@ const SOURCE: Record<Transaction['source'], string> = {
   text: 'Board text edit',
   ai: 'Request',
   voice: 'Spoken request',
-  system: 'BoardBot',
+  system: 'Marker',
 }
 
 function idsOf(ops: Op[]): string[] {

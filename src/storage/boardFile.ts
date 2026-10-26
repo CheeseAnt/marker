@@ -109,9 +109,9 @@ export function decodeBoardZip(bytes: Uint8Array): BoardFile {
   try {
     files = unzipSync(bytes)
   } catch {
-    throw new BoardFileError('This file is not a BoardBot board (it is not a valid zip).')
+    throw new BoardFileError('This file is not a Marker board (it is not a valid zip).')
   }
-  if (!files['board.board']) throw new BoardFileError('This zip has no board.board, so it is not a BoardBot board.')
+  if (!files['board.board']) throw new BoardFileError('This zip has no board.board, so it is not a Marker board.')
   const text = strFromU8(files['board.board'])
   const board = parseBoard(text)
   const index = files['assets.json'] ? (JSON.parse(strFromU8(files['assets.json'])) as Omit<Asset, 'dataURL' | 'created'>[]) : []

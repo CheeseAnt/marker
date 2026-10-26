@@ -24,7 +24,7 @@ Fonts: ${FONT_PRESETS.map((f) => `${f.id} (${f.note})`).join(', ')}. A \`style d
 How to edit:
 - Make every change by calling edit_board once with all the ops. Never describe changes in prose instead.
 - Change only what the request asks for. Keep existing ids; refer to elements by their ids.
-- Place new nodes relative to existing ones (place: {rel, of}) or leave place out and BoardBot lays them out next to what they connect to. Use absolute x,y only when the user asks for a position.
+- Place new nodes relative to existing ones (place: {rel, of}) or leave place out and Marker lays them out next to what they connect to. Use absolute x,y only when the user asks for a position.
 - Connect related nodes with add_edge; removing a node removes its edges too.
 - "This", "it" and "these" usually mean the selected elements. "That", "again" or "the last one" can also mean the most recent change or answer; check the recent conversation and changes.
 - When the user agrees to something you suggested ("yes", "do that"), carry out what you proposed in your last reply.

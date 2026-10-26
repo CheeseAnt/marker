@@ -1,6 +1,8 @@
 import { settingsSchema, type Secrets, type Settings } from './schema'
 
-export const SETTINGS_FILE_SCHEMA = 'boardbot-settings'
+export const SETTINGS_FILE_SCHEMA = 'marker-settings'
+// Files exported before the app was renamed from BoardBot.
+const LEGACY_SETTINGS_SCHEMAS: unknown[] = ['boardbot-settings']
 export const SETTINGS_FILE_VERSION = 1
 
 /** Each step upgrades raw settings from version n to n + 1. Add one whenever the shape changes. */
@@ -39,7 +41,7 @@ export function migrateSettings(raw: Record<string, unknown>, from: number, migr
   let current = raw
   for (let v = from; v < SETTINGS_FILE_VERSION; v++) {
     const step = migrations[v]
-    if (!step) throw new SettingsFileError(`Settings from version ${from} can't be read by this version of BoardBot.`)
+    if (!step) throw new SettingsFileError(`Settings from version ${from} can't be read by this version of Marker.`)
     current = step(current)
   }
   return current
@@ -51,16 +53,16 @@ export function parseSettingsFile(text: string, migrations: Record<number, Migra
   try {
     data = JSON.parse(text)
   } catch {
-    throw new SettingsFileError("This file isn't a BoardBot settings file (it isn't valid JSON).")
+    throw new SettingsFileError("This file isn't a Marker settings file (it isn't valid JSON).")
   }
   const file = data as { schema?: unknown; version?: unknown; settings?: unknown }
-  if (file?.schema !== SETTINGS_FILE_SCHEMA || typeof file.settings !== 'object' || file.settings === null) {
-    throw new SettingsFileError("This file isn't a BoardBot settings file.")
+  if ((file?.schema !== SETTINGS_FILE_SCHEMA && !LEGACY_SETTINGS_SCHEMAS.includes(file?.schema)) || typeof file.settings !== 'object' || file.settings === null) {
+    throw new SettingsFileError("This file isn't a Marker settings file.")
   }
   const version = typeof file.version === 'number' ? file.version : NaN
   if (!Number.isInteger(version) || version < 0) throw new SettingsFileError('This settings file has no valid version number.')
   if (version > SETTINGS_FILE_VERSION) {
-    throw new SettingsFileError(`This settings file is from a newer version of BoardBot (format ${version}). Update BoardBot to import it.`)
+    throw new SettingsFileError(`This settings file is from a newer version of Marker (format ${version}). Update Marker to import it.`)
   }
   const raw = migrateSettings(file.settings as Record<string, unknown>, version, migrations)
   // Keys are never imported, even from a hand-edited file.

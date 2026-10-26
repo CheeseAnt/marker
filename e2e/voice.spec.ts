@@ -16,8 +16,8 @@ async function openWith(page: Page, settings: Record<string, unknown>) {
   await page.evaluate((settings) => {
     localStorage.clear()
     indexedDB.deleteDatabase('keyval-store')
-    localStorage.setItem('boardbot.settings', JSON.stringify(settings))
-    localStorage.setItem('boardbot.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'k' } }))
+    localStorage.setItem('marker.settings', JSON.stringify(settings))
+    localStorage.setItem('marker.secrets', JSON.stringify({ 'azure-foundry': { apiKey: 'k' } }))
   }, settings)
   await page.reload()
   await page.locator('.excalidraw').waitFor()
@@ -61,7 +61,7 @@ test('hold the shortcut to speak a request, which is sent straight away', async 
   await expect(page.locator('.toast.done')).toContainText('Added a cache')
   // About 1.5 s of 16 kHz 16-bit audio, plus the form around it.
   expect(audio[0]).toBeGreaterThan(16000 * 2)
-  const history = await page.evaluate(() => (window as unknown as { __boardbot: { useBoard: { getState(): { history: { past: { source: string; prompt?: string }[] } } } } }).__boardbot.useBoard.getState().history.past.at(-1))
+  const history = await page.evaluate(() => (window as unknown as { __marker: { useBoard: { getState(): { history: { past: { source: string; prompt?: string }[] } } } } }).__marker.useBoard.getState().history.past.at(-1))
   expect(history).toMatchObject({ source: 'voice', prompt: 'Add a cache next to the API.' })
 })
 
@@ -85,12 +85,12 @@ test('tap the microphone to start and again to stop; the text waits in the promp
 })
 
 test('on-device speech model transcribes real speech', async ({ page }) => {
-  test.skip(!process.env.BOARDBOT_SPEECH_E2E, 'downloads a speech model; set BOARDBOT_SPEECH_E2E=1 to run')
+  test.skip(!process.env.MARKER_SPEECH_E2E, 'downloads a speech model; set MARKER_SPEECH_E2E=1 to run')
   test.setTimeout(240_000)
   await openWith(page, { voice: { mode: 'on-device', onDeviceModel: 'moonshine-tiny' } })
   const started = Date.now()
   await page.evaluate(async () => {
-    const { useVoice } = (window as unknown as { __boardbot: { useVoice: { getState(): { prepareModel(): Promise<void> } } } }).__boardbot
+    const { useVoice } = (window as unknown as { __marker: { useVoice: { getState(): { prepareModel(): Promise<void> } } } }).__marker
     await useVoice.getState().prepareModel()
   })
   console.log(`model ready after ${Date.now() - started} ms`)
