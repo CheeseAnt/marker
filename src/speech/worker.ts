@@ -1,14 +1,12 @@
 /// <reference lib="webworker" />
 // Runs speech recognition off the main thread so the canvas stays responsive.
 import { env, pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers'
+import ortPaths from 'virtual:ort-paths'
 import { dtypeFor, type SpeechDevice } from './models'
 
 env.allowLocalModels = false
-// The ONNX runtime is served by this app (see scripts/copy-static-assets.mjs), not a CDN.
-env.backends.onnx.wasm!.wasmPaths = {
-  mjs: '/ort/ort-wasm-simd-threaded.asyncify.mjs',
-  wasm: '/ort/ort-wasm-simd-threaded.asyncify.wasm',
-}
+// The ONNX runtime comes from this app, not a CDN (see the ort-runtime plugin in vite.config.ts).
+env.backends.onnx.wasm!.wasmPaths = ortPaths
 
 export type WorkerRequest =
   | { type: 'load'; repo: string }

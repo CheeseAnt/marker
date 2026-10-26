@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:preview": "npm run build && playwright test --config playwright.preview.config.ts"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
