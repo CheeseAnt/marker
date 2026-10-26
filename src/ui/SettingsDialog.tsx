@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { THEME_LABELS } from './theme'
 import { DEFAULT_API_VERSION, parseEndpoint, type EndpointStyle } from '../ai/providers/azureEndpoint'
 import { createProvider } from '../ai/providers'
 import { ProviderError, type ConnectionReport } from '../ai/providers/types'
@@ -39,6 +40,7 @@ export function SettingsDialog({ open, onClose }: Props) {
   const [shortcuts, setShortcuts] = useState(saved.shortcuts)
   const [pricing, setPricing] = useState(saved.pricing)
   const [budget, setBudget] = useState(saved.budget)
+  const [theme, setTheme] = useState(saved.theme)
   // Settings without their own controls (e.g. requests at once) come from here, so imports keep them.
   const [base, setBase] = useState(saved)
   const [pendingImport, setPendingImport] = useState<PendingImport | null>(null)
@@ -47,7 +49,7 @@ export function SettingsDialog({ open, onClose }: Props) {
   const [showKey, setShowKey] = useState(false)
   const [test, setTest] = useState<TestState>({ kind: 'idle' })
   const abort = useRef<AbortController | null>(null)
-  const ids = { endpoint: useId(), deployment: useId(), key: useId(), style: useId(), version: useId(), hint: useId(), keyHint: useId() }
+  const ids = { endpoint: useId(), deployment: useId(), key: useId(), style: useId(), version: useId(), hint: useId(), keyHint: useId(), theme: useId() }
 
   // Opening starts from what is saved; closing cancels any running test.
   useEffect(() => {
@@ -59,6 +61,7 @@ export function SettingsDialog({ open, onClose }: Props) {
       setShortcuts(useSettings.getState().settings.shortcuts)
       setPricing(useSettings.getState().settings.pricing)
       setBudget(useSettings.getState().settings.budget)
+      setTheme(useSettings.getState().settings.theme)
       setBase(useSettings.getState().settings)
       setPendingImport(null)
       setTransfer(null)
@@ -91,11 +94,12 @@ export function SettingsDialog({ open, onClose }: Props) {
     }))
   }
 
-  const draftSettings = (): Settings => ({ ...base, voice, shortcuts, pricing, budget, providers: { ...base.providers, 'azure-foundry': azure } })
+  const draftSettings = (): Settings => ({ ...base, voice, shortcuts, pricing, budget, theme, providers: { ...base.providers, 'azure-foundry': azure } })
 
   /** Puts imported settings into the form; nothing is kept until Save. */
   const applyImported = (next: Settings) => {
     setBase(next)
+    setTheme(next.theme)
     setAzure(next.providers['azure-foundry'])
     setVoice(next.voice)
     setShortcuts(next.shortcuts)
@@ -269,6 +273,21 @@ export function SettingsDialog({ open, onClose }: Props) {
           onShortcuts={setShortcuts}
           onTranscriptionDeployment={(d) => set('transcriptionDeployment', d)}
         />
+
+        <section className="settings-section" aria-labelledby="appearance-heading">
+          <h3 id="appearance-heading">Appearance</h3>
+          <div className="field">
+            <label htmlFor={ids.theme}>Theme</label>
+            <select id={ids.theme} value={theme} onChange={(e) => setTheme(e.target.value as Settings['theme'])}>
+              {(Object.keys(THEME_LABELS) as Settings['theme'][]).map((t) => (
+                <option key={t} value={t}>
+                  {THEME_LABELS[t]}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">The board's own colours stay as they are; the canvas shows them inverted in the dark theme.</p>
+          </div>
+        </section>
 
         <CostSettings
           pricing={pricing}

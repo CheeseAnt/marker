@@ -12,6 +12,23 @@
   --marker-blue: #2459c9;
   --marker-red: #c8372d;
   --marker-green: #2b7a4b;
+  --marker-blue-deep: #1b469f;
+  --marker-red-deep: #9f2a22;
+  --amber: #c98a16;
+  /* Text on a marker-coloured button. */
+  --on-marker: #fff;
+  /* Cards, fields and popovers. */
+  --surface: #fff;
+  --tint: #f4f7fd;
+  --tint-strong: #eef3fc;
+  --strip: #d5dadf;
+  --ledge-shine: #fbfcfd;
+  --ledge-bottom: #aeb5bc;
+  /* RGB channels for shadows and scrims, used as rgb(var(--shadow) / alpha). */
+  --shadow: 30 30 30;
+  /* Usage chart bars, and the one being pointed at. */
+  --chart-bar: var(--marker-blue);
+  --chart-bar-active: var(--marker-blue-deep);
 
   --font-ui: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
   /* Registered by Excalidraw from the self-hosted fonts in public/fonts. */
@@ -29,6 +46,37 @@
   color: var(--ink);
   background: var(--board);
   color-scheme: light;
+}
+
+/*
+ * The dark theme: the board's frame at night. Greys keep a slight blue, and the markers are
+ * lighter so they read on dark grey; text on them turns dark to stay legible.
+ */
+:root[data-theme='dark'] {
+  --board: #1a1d21;
+  --ink: #e4e7ea;
+  --ink-soft: #a2aab3;
+  --frame: #434a53;
+  --frame-deep: #6b747e;
+  --frame-light: #2b3036;
+  --marker-blue: #7ea6ff;
+  --marker-red: #ff8b80;
+  --marker-green: #6fcf97;
+  --marker-blue-deep: #a9c3ff;
+  --marker-red-deep: #ffb3ab;
+  --amber: #e8b04a;
+  --on-marker: #10141c;
+  --surface: #23272c;
+  --tint: #222b3a;
+  --tint-strong: #26324a;
+  --strip: #31363d;
+  --ledge-shine: #4a515a;
+  --ledge-bottom: #24282d;
+  --shadow: 0 0 0;
+  /* Checked with the dataviz validator against --surface: both over 3:1, and 24 ΔE apart. */
+  --chart-bar: #4f80e6;
+  --chart-bar-active: #b4cbff;
+  color-scheme: dark;
 }
 
 /* Its own name: Excalidraw registers "Cascadia" itself, and two faces with one name confuse loading. */
@@ -165,10 +213,10 @@ button {
   padding: 0.625rem 1rem 0.75rem;
   /* Brushed aluminium: a lit lip on top, the tray falling into shadow. */
   background:
-    linear-gradient(to bottom, #fbfcfd 0, #fbfcfd 1px, transparent 1px),
-    linear-gradient(to bottom, var(--frame-light), var(--frame) 70%, #aeb5bc);
+    linear-gradient(to bottom, var(--ledge-shine) 0, var(--ledge-shine) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--frame-light), var(--frame) 70%, var(--ledge-bottom));
   border-top: 1px solid var(--frame-deep);
-  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.08);
+  box-shadow: inset 0 -2px 0 rgb(var(--shadow) / 0.08);
   position: relative;
 }
 
@@ -229,9 +277,9 @@ button {
   align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.25rem 0.25rem 0.25rem;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--frame-deep);
-  box-shadow: 0 1px 2px rgb(30 30 30 / 0.15);
+  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.15);
   transform: rotate(-1deg);
 }
 
@@ -283,7 +331,7 @@ button {
   border: 1px solid var(--frame-deep);
   border-radius: 3px;
   padding: 0.5rem 0.75rem;
-  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.12);
+  box-shadow: inset 0 1px 2px rgb(var(--shadow) / 0.12);
 }
 
 .ledge-shortcut {
@@ -297,7 +345,7 @@ button {
   font-family: var(--font-ui);
   font-size: var(--step--1);
   color: var(--ink-soft);
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--frame);
   border-bottom-width: 2px;
   border-radius: 4px;
@@ -329,8 +377,8 @@ button {
 
 .ledge-button.primary {
   background: var(--marker-blue);
-  border-color: #1b469f;
-  color: #fff;
+  border-color: var(--marker-blue-deep);
+  color: var(--on-marker);
   font-weight: 700;
 }
 
@@ -342,10 +390,10 @@ button {
 .ledge-button.mic[data-state='recording'],
 .ledge-button.mic[data-state='starting'] {
   background: var(--marker-red);
-  border-color: #9f2a22;
-  color: #fff;
+  border-color: var(--marker-red-deep);
+  color: var(--on-marker);
   /* The ring grows with how loudly you speak. */
-  box-shadow: 0 0 0 calc(2px + var(--level, 0) * 8px) rgb(200 55 45 / 0.25);
+  box-shadow: 0 0 0 calc(2px + var(--level, 0) * 8px) color-mix(in srgb, var(--marker-red) 25%, transparent);
 }
 
 .ledge-button.mic[data-state='transcribing'] {
@@ -369,7 +417,7 @@ button {
   padding: 0.3125rem 1rem;
   font-size: var(--step--1);
   color: var(--ink-soft);
-  background: #d5dadf;
+  background: var(--strip);
   border-top: 1px solid var(--frame-deep);
 }
 
@@ -388,7 +436,7 @@ button {
   height: 0.5rem;
   margin-right: 0.375rem;
   border-radius: 50%;
-  background: #c98a16;
+  background: var(--amber);
   vertical-align: 0.05em;
 }
 
@@ -496,10 +544,10 @@ button {
   max-height: 60vh;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--frame-deep);
   border-radius: 6px;
-  box-shadow: 0 12px 32px rgb(30 30 30 / 0.2);
+  box-shadow: 0 12px 32px rgb(var(--shadow) / 0.2);
   color: var(--ink);
   font-size: var(--step-0);
 }
@@ -638,11 +686,11 @@ button {
   width: max-content;
   max-width: min(34rem, calc(100% - 2rem));
   padding: 0.625rem 0.75rem 0.625rem 1rem;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--frame-deep);
   border-left: 4px solid var(--marker-blue);
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgb(30 30 30 / 0.16);
+  box-shadow: 0 8px 24px rgb(var(--shadow) / 0.16);
 }
 
 .toast.error {
@@ -724,12 +772,12 @@ button {
   border: 1px solid var(--frame-deep);
   border-radius: 6px;
   color: var(--ink);
-  background: #fff;
-  box-shadow: 0 1px 0 #fff inset, 0 18px 48px rgb(30 30 30 / 0.22);
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--surface) inset, 0 18px 48px rgb(var(--shadow) / 0.22);
 }
 
 .settings::backdrop {
-  background: rgb(30 30 30 / 0.32);
+  background: rgb(var(--shadow) / 0.32);
 }
 
 .settings form {
@@ -860,7 +908,7 @@ button {
   padding: 0.4375rem 0.625rem;
   border: 1px solid var(--frame-deep);
   border-radius: 3px;
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   min-width: 0;
 }
@@ -897,13 +945,13 @@ button {
 
 .settings button.quiet {
   border-color: var(--frame);
-  background: #fff;
+  background: var(--surface);
 }
 
 .settings button.primary {
   background: var(--marker-blue);
-  border-color: #1b469f;
-  color: #fff;
+  border-color: var(--marker-blue-deep);
+  color: var(--on-marker);
   font-weight: 700;
 }
 
@@ -991,7 +1039,7 @@ button {
   padding: 0.75rem 1rem !important;
   border: 1px solid var(--marker-blue) !important;
   border-radius: 4px;
-  background: #f4f7fd;
+  background: var(--tint);
 }
 
 .import-changes {
@@ -1027,7 +1075,7 @@ button {
   flex-direction: column;
   min-height: 0;
   border-left: 1px solid var(--frame-deep);
-  background: #fff;
+  background: var(--surface);
 }
 
 .drawer-header {
@@ -1058,8 +1106,8 @@ button {
 
 .drawer-header button.primary {
   background: var(--marker-blue);
-  border-color: #1b469f;
-  color: #fff;
+  border-color: var(--marker-blue-deep);
+  color: var(--on-marker);
 }
 
 .drawer-header button:disabled {
@@ -1161,8 +1209,8 @@ button {
 
 .template-actions button.primary {
   background: var(--marker-blue);
-  border-color: #1b469f;
-  color: #fff;
+  border-color: var(--marker-blue-deep);
+  color: var(--on-marker);
 }
 
 .template-actions button.quiet {
@@ -1190,7 +1238,7 @@ button {
   padding: 0.1875rem 0.625rem;
   border-radius: 3px;
   border: 1px solid var(--frame);
-  background: #fff;
+  background: var(--surface);
   font-size: var(--step--1);
   cursor: pointer;
 }
@@ -1348,7 +1396,7 @@ button {
 }
 
 .usage-budget.near .usage-budget-bar span {
-  background: #c98a16;
+  background: var(--amber);
 }
 
 .usage-budget.over .usage-budget-bar span {
@@ -1404,11 +1452,11 @@ button {
 }
 
 .usage-bar {
-  fill: var(--marker-blue);
+  fill: var(--chart-bar);
 }
 
 .usage-bar.active {
-  fill: #1b469f;
+  fill: var(--chart-bar-active);
 }
 
 .usage-tooltip {
@@ -1417,10 +1465,10 @@ button {
   display: grid;
   gap: 0.0625rem;
   padding: 0.375rem 0.5rem;
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--frame-deep);
   border-radius: 4px;
-  box-shadow: 0 4px 12px rgb(30 30 30 / 0.15);
+  box-shadow: 0 4px 12px rgb(var(--shadow) / 0.15);
   font-size: 0.75rem;
   white-space: nowrap;
   pointer-events: none;
@@ -1580,7 +1628,7 @@ button {
 
 .history-row.current {
   border-left-color: var(--marker-blue);
-  background: #eef3fc;
+  background: var(--tint-strong);
 }
 
 .history-row.undone {
@@ -1671,8 +1719,8 @@ button {
 
 .drawer-toggles button[aria-pressed='true'] {
   background: var(--marker-blue);
-  border-color: #1b469f;
-  color: #fff;
+  border-color: var(--marker-blue-deep);
+  color: var(--on-marker);
 }
 
 @media (max-width: 720px) {

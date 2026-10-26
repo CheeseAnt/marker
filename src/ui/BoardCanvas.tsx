@@ -22,6 +22,8 @@ import { followersOf, unionBoxes, type Box } from '../model/geometry'
 import type { Id } from '../model/types'
 import { CanvasOverlay, type FollowLink } from './CanvasOverlay'
 import { toScreen, type View } from './canvasView'
+import { THEME_LABELS, useTheme } from './theme'
+import { useSettings } from '../settings/store'
 
 const HIGHLIGHT_MS = 1600
 /** How long the canvas must be quiet before hand-drawn elements get short ids. */
@@ -150,6 +152,7 @@ export function BoardCanvas({ onError }: Props) {
   const [view, setView] = useState<View>({ scrollX: 0, scrollY: 0, zoom: 1 })
   const [links, setLinks] = useState<FollowLink[]>([])
   const revision = useBoard((s) => s.revision)
+  const theme = useTheme()
 
   const render = useCallback(() => {
     const api = apiRef.current
@@ -349,6 +352,7 @@ export function BoardCanvas({ onError }: Props) {
     <div ref={hostRef} className="canvas-host">
       <Excalidraw
         initialData={initialData}
+        theme={theme}
         excalidrawAPI={(api) => {
           apiRef.current = api
           setView(viewOf(api.getAppState()))
@@ -435,6 +439,25 @@ function setBoardFont(font: FontId) {
   apply([{ op: 'board', set: { defaults: withBoardFont(board.defaults, font) } }], 'manual', { title: `Changed the board font to ${fontPreset(font).label}` })
 }
 
+/** Light, dark, or whatever the system uses; it changes the interface, not the board. */
+function ThemeMenu() {
+  const current = useSettings((s) => s.settings.theme)
+  return (
+    <MainMenu.Group title="Theme">
+      {(Object.keys(THEME_LABELS) as (keyof typeof THEME_LABELS)[]).map((t) => (
+        <MainMenu.Item
+          key={t}
+          selected={current === t}
+          icon={current === t ? <CheckIcon /> : <span />}
+          onSelect={() => useSettings.getState().update((s) => ({ ...s, theme: t }))}
+        >
+          {THEME_LABELS[t]}
+        </MainMenu.Item>
+      ))}
+    </MainMenu.Group>
+  )
+}
+
 /** Excalidraw's main menu, with the board font presets each shown in their own typeface. */
 const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? 'Cmd' : 'Ctrl'
 
@@ -467,6 +490,8 @@ function BoardMenu() {
           </MainMenu.Item>
         ))}
       </MainMenu.Group>
+      <MainMenu.Separator />
+      <ThemeMenu />
       <MainMenu.Separator />
       <MainMenu.DefaultItems.SaveAsImage />
       <MainMenu.DefaultItems.ClearCanvas />

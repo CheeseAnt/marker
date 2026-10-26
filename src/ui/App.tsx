@@ -17,11 +17,14 @@ import { UnsavedDialog } from './UnsavedDialog'
 import { openBoardAfterSaving } from '../state/unsaved'
 import type { Id } from '../model/types'
 import { StatusBar } from './StatusBar'
+import { useTheme } from './theme'
 
 export default function App() {
   const [loaded, setLoaded] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<DrawerView | null>(null)
+  // The whole interface follows the theme, whether or not the canvas has loaded.
+  useTheme()
   const [settingsOpen, setSettingsOpen] = useState(false)
   // The selection is captured when the dialog opens, since using the dialog can't change it.
   const [templateSelection, setTemplateSelection] = useState<Id[] | null>(null)
