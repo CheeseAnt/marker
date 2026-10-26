@@ -336,6 +336,14 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
         styleHintDiff(ex, c, style, hints, false)
         break
       }
+      case 'frame':
+        // A frame moved or resized by hand keeps that box instead of fitting its members.
+        if (!near(ex.x, c.x) || !near(ex.y, c.y) || !near(ex.width, c.width) || !near(ex.height, c.height)) {
+          set.at = { x: r2(ex.x), y: r2(ex.y) }
+          set.size = { w: r2(ex.width), h: r2(ex.height) }
+        }
+        if ((ex.name ?? '') !== el.label) set.label = ex.name ?? ''
+        break
       case 'edge':
         Object.assign(set, edgeChanges(el, ex, c, endpointOf))
         styleHintDiff(ex, c, style, hints)
@@ -358,6 +366,10 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
     if (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId)) continue
     const element = newElement(ex, toBoardId(ex.id), labelOf.get(ex.id), endpointOf)
     if (!element) continue
+    if (element.kind === 'frame') {
+      adds.push({ op: 'add', element: { ...element, hints: { seed: ex.seed } } })
+      continue
+    }
     const [reference, referenceLabel] = compileBoard({ ...board, elements: [element] }).elements
     const style: Patch = {}
     const hints: Patch = {}
@@ -371,8 +383,9 @@ export function diffSceneDetailed({ board, compiled, scene }: DiffContext): Scen
     adds.push({ op: 'add', element: { ...element, style, hints: { seed: ex.seed, ...hints } } as BoardElement })
   }
 
+  const frameOps = diffFrames(board, live, adds, toBoardId)
   const groupOps = diffGroups(board, live, liveById, toBoardId)
-  const structural = [...adds, ...updates, ...groupOps, ...removes]
+  const structural = [...adds, ...updates, ...frameOps, ...groupOps, ...removes]
   let intermediate = structural.length ? commit(board, structural).board : board
   // Ungrouping a copy detaches it; its parts take their place in the board as ordinary elements.
   const detachOpsList = detached.flatMap((id) => detachOps(intermediate, id, { keepGrouped: false }))
@@ -418,7 +431,7 @@ function isCylinderPart(exId: string, boardById: Map<Id, BoardElement>): boolean
   return el?.kind === 'node' && el.shape === 'cylinder'
 }
 
-const RENDERED = new Set(['rectangle', 'ellipse', 'diamond', 'text', 'arrow', 'line', 'freedraw', 'image'])
+const RENDERED = new Set(['rectangle', 'ellipse', 'diamond', 'text', 'arrow', 'line', 'freedraw', 'image', 'frame'])
 
 function isRendered(ex: ExElement): boolean {
   return RENDERED.has(ex.type)
@@ -459,11 +472,41 @@ function newElement(
     case 'freedraw':
       if (!ex.points?.length) return undefined
       return { ...common, kind: 'draw', at: { x: r2(ex.x), y: r2(ex.y) }, path: pointsToPath(ex.points.map(([x, y]) => ({ x, y }))) }
+    case 'frame':
+      // Members are filled in from the scene's frameIds (see diffFrames).
+      return { ...common, kind: 'frame', label: ex.name ?? '', members: [], at: { x: r2(ex.x), y: r2(ex.y) }, size: { w: r2(ex.width), h: r2(ex.height) } }
     case 'image':
       if (!ex.fileId) return undefined
       return { ...common, kind: 'image', asset: ex.fileId, at, size: { w: r2(ex.width), h: r2(ex.height) } }
   }
   return undefined
+}
+
+/**
+ * Frame membership from the scene: Excalidraw puts an element in a frame (frameId) when it's
+ * drawn or dropped inside one. New frames get their members on the add op itself.
+ */
+function diffFrames(board: Board, live: ExElement[], adds: Op[], toBoardId: (exId: string) => Id): Op[] {
+  const boardById = new Map(board.elements.map((e) => [e.id, e]))
+  const want = new Map<Id, Id[]>()
+  for (const ex of live) {
+    if (!ex.frameId || !isRendered(ex) || ex.type === 'frame' || (ex.type === 'text' && ex.containerId)) continue
+    if (ex.id.endsWith(LABEL_SUFFIX)) continue
+    const member = isCylinderPart(ex.id, boardById) ? partOwner(ex.id)! : (ownerInstance(ex.id)?.instance ?? toBoardId(ex.id))
+    const frame = toBoardId(ex.frameId)
+    const list = want.get(frame) ?? []
+    if (!list.includes(member)) list.push(member)
+    want.set(frame, list)
+  }
+  for (const op of adds) if (op.op === 'add' && op.element.kind === 'frame') op.element.members = want.get(op.element.id) ?? []
+  const ops: Op[] = []
+  for (const el of board.elements) {
+    if (el.kind !== 'frame') continue
+    const members = want.get(el.id) ?? []
+    const same = members.length === el.members.length && members.every((m) => el.members.includes(m))
+    if (!same) ops.push({ op: 'update', id: el.id, set: { members: [...el.members.filter((m) => members.includes(m)), ...members.filter((m) => !el.members.includes(m))] } })
+  }
+  return ops
 }
 
 /** Excalidraw groupIds (innermost first) back into board groups. */
@@ -480,7 +523,7 @@ function diffGroups(
     desired.set(group, list)
   }
   for (const ex of live) {
-    if (!isRendered(ex) || (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId))) continue
+    if (!isRendered(ex) || ex.type === 'frame' || (ex.type === 'text' && ex.containerId && liveById.has(ex.containerId))) continue
     // A cylinder's parts are grouped under its own id; the cylinder itself stands for them.
     if (isCylinderPart(ex.id, new Map(board.elements.map((e) => [e.id, e])))) continue
     // A copy's parts stand for the copy: only groups outside it (after its own id) count.
@@ -517,7 +560,7 @@ function diffGroups(
 
 /** Minimal reorders (keeping the longest already-ordered run) to match the scene's z-order. */
 function diffOrder(board: Board, live: ExElement[], toBoardId: (exId: string) => Id, idFor: Map<string, Id>): Op[] {
-  const present = new Set(board.elements.filter((e) => e.kind !== 'group').map((e) => e.id))
+  const present = new Set(board.elements.filter((e) => e.kind !== 'group' && e.kind !== 'frame').map((e) => e.id))
   const desired: Id[] = []
   for (const ex of live) {
     if (ex.id.endsWith(LABEL_SUFFIX) || (ex.type === 'text' && ex.containerId) || partOwner(ex.id)) continue

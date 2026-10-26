@@ -228,6 +228,24 @@ function parseElement(keyword: string, p: LineParser): BoardElement {
       p.punct(']')
       return { kind: 'group', id, ...(label !== undefined && { label }), members, ...parseAttrs(p) }
     }
+    case 'frame': {
+      const label = p.string('a name')
+      p.punct('[')
+      const members: string[] = []
+      while (!p.isPunct(']')) {
+        if (members.length) p.punct(',')
+        members.push(p.word('a member id'))
+      }
+      p.punct(']')
+      let at: Point | undefined
+      if (p.isWord('at')) {
+        p.next()
+        at = p.point()
+      }
+      const size = parseSize(p)
+      if (Boolean(at) !== Boolean(size)) p.fail('give a frame both at(x,y) and size(w,h), or neither to fit its members')
+      return { kind: 'frame', id, label, members, ...(at && { at }), ...(size && { size }), ...parseAttrs(p) }
+    }
     case 'image': {
       const ref = p.word('asset:<id>')
       if (!ref.startsWith('asset:') || ref.length <= 6) p.fail('expected asset:<id>')

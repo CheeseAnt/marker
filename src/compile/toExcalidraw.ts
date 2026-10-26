@@ -11,7 +11,9 @@ import {
   DEFAULT_FILL,
   DEFAULT_STROKE,
   FILL_STYLE,
+  LABEL_SUFFIX,
   labelId,
+  partOwner,
   ROUNDNESS,
   STICKY_FILL,
   type ExElement,
@@ -201,6 +203,7 @@ export function compileBoard(board: Board, depth = 0): Compiled {
     if (box) copies.set(el.id, compileCopy(board, el, box, depth))
   }
   const out: ExElement[] = []
+  const frames: ExElement[] = []
   const bound = new Map<Id, { id: string; type: 'arrow' | 'text' }[]>()
   const bind = (owner: Id, ref: { id: string; type: 'arrow' | 'text' }) => {
     const list = bound.get(owner) ?? []
@@ -269,8 +272,9 @@ export function compileBoard(board: Board, depth = 0): Compiled {
         if (el.shape === 'cylinder') {
           // The node's own element only carries bindings and the label; the parts draw it.
           const group = [el.id, ...groupIds]
-          out.push({ ...base(el, 'rectangle', box, { ...style, stroke: DEFAULT_FILL, fill: DEFAULT_FILL }, group), roundness: null })
+          // Excalidraw keeps a label just above its container, so the outline goes underneath both.
           out.push(...cylinderParts(el, box, style, group))
+          out.push({ ...base(el, 'rectangle', box, { ...style, stroke: DEFAULT_FILL, fill: DEFAULT_FILL }, group), roundness: null })
           if (el.label) {
             const ry = cylinderRim(box)
             const middle = { x: box.x + box.w / 2, y: box.y + ry + (box.h - ry) / 2 }
@@ -330,10 +334,25 @@ export function compileBoard(board: Board, depth = 0): Compiled {
         if (copy) out.push(...copy.elements.map((e) => ({ ...e, groupIds: [...e.groupIds, ...groupIds] })))
         break
       }
+      case 'frame':
+        if (box) frames.push({ ...base(el, 'frame', box, { ...style, fill: DEFAULT_FILL }, []), name: el.label || null })
+        break
       case 'group':
         break
     }
   }
+
+  // Frames go first, under everything, and their members (with labels and parts) point at them.
+  const frameOf = new Map<string, string>()
+  for (const el of board.elements) if (el.kind === 'frame') for (const m of el.members) frameOf.set(m, el.id)
+  if (frameOf.size) {
+    for (const e of out) {
+      const owner = e.id.endsWith(LABEL_SUFFIX) ? e.id.slice(0, -LABEL_SUFFIX.length) : (partOwner(e.id) ?? e.id.split('/')[0])
+      const frame = frameOf.get(owner)
+      if (frame) e.frameId = frame
+    }
+  }
+  out.unshift(...frames)
 
   for (const el of out) {
     const refs = bound.get(el.id)
@@ -380,6 +399,7 @@ function compileCopy(board: Board, el: InstanceElement, box: Box, depth: number)
     if (e.points) next.points = e.points.map(([x, y]) => [x * scale, y * scale] as const)
     if (e.fontSize) next.fontSize = e.fontSize * scale
     if (e.containerId) next.containerId = id(e.containerId)
+    if (e.frameId) next.frameId = id(e.frameId)
     if (e.startBinding !== undefined) next.startBinding = rebind(e.startBinding)
     if (e.endBinding !== undefined) next.endBinding = rebind(e.endBinding)
     return next

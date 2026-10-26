@@ -60,6 +60,8 @@ export interface ExElement {
   status?: string
   scale?: [number, number]
   crop?: ExCrop | null
+  // frame
+  name?: string | null
 }
 
 export interface ExCrop {

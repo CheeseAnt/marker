@@ -1,7 +1,7 @@
 import { fontPreset, type FontId } from './fonts'
 import { parsePath } from './path'
 import { instanceContent, MAX_NESTING } from '../templates/expand'
-import type { Board, BoardElement, Id, InstanceElement, NodeElement, Placement, Size, Style, TextElement } from './types'
+import type { Board, BoardElement, FrameElement, Id, InstanceElement, NodeElement, Placement, Size, Style, TextElement } from './types'
 
 export interface Box {
   x: number
@@ -215,7 +215,20 @@ export function resolveBoxes(board: Board, depth = 0): Map<Id, Box> {
   for (const el of board.elements) {
     if (el.kind === 'group') groupBox(el.id, byId, boxes, new Set())
   }
+  for (const el of board.elements) {
+    if (el.kind === 'frame') boxes.set(el.id, frameBox(el, boxes))
+  }
   return boxes
+}
+
+/** Space a frame leaves around its members when it fits them, with room for its name above. */
+export const FRAME_PADDING = 40
+
+function frameBox(el: FrameElement, boxes: Map<Id, Box>): Box {
+  if (el.at && el.size) return { ...el.at, ...el.size }
+  const inner = unionBoxes(el.members.flatMap((m) => boxes.get(m) ?? []))
+  if (!inner) return { x: el.at?.x ?? 0, y: el.at?.y ?? 0, w: 200, h: 120 }
+  return { x: inner.x - FRAME_PADDING, y: inner.y - FRAME_PADDING, w: inner.w + FRAME_PADDING * 2, h: inner.h + FRAME_PADDING * 2 }
 }
 
 function groupBox(id: Id, byId: Map<Id, BoardElement>, boxes: Map<Id, Box>, seen: Set<Id>): Box | undefined {

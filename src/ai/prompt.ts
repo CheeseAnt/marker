@@ -14,6 +14,7 @@ export const SYSTEM_PROMPT = `You edit a hand-drawn whiteboard for the user. The
   edge <id> <from> -> <to> ["label"] [dashed|dotted] [style]     (heads: ->, <-, <->, --)
   text <id> "<text>" [placement] [style]
   group <id> ["label"] [member, member, ...]
+  frame <id> "<name>" [member, member, ...] [at(x,y) size(w,h)]     (a named area drawn around its members)
   draw <id> at(x,y) path="<svg path>"
   image <id> asset:<id> at(x,y) size(w,h)
   use <id> <template>@<version> [placement] [scale(n)] [with(param="value", ...)] [override(part.text="...", part.fill=#hex, ...)]
@@ -66,7 +67,7 @@ function neighbourhood(board: Board, ids: Set<Id>): Set<Id> {
         out.add(el.id)
         ends.forEach((e) => out.add(e))
       }
-    } else if (el.kind === 'group' && el.members.some((m) => ids.has(m))) {
+    } else if ((el.kind === 'group' || el.kind === 'frame') && el.members.some((m) => ids.has(m))) {
       out.add(el.id)
     } else if ('at' in el && el.at && 'kind' in el.at && el.at.kind === 'rel' && (ids.has(el.id) || ids.has(el.at.of))) {
       out.add(el.id)

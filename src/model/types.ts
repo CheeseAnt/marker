@@ -97,6 +97,16 @@ export const groupSchema = z.object({
   members: z.array(idSchema),
 })
 
+/** A named area (Excalidraw frame) around its members. Without a box it wraps them. */
+export const frameSchema = z.object({
+  ...base,
+  kind: z.literal('frame'),
+  label: z.string().default(''),
+  members: z.array(idSchema),
+  at: pointSchema.optional(),
+  size: sizeSchema.optional(),
+})
+
 export const imageSchema = z.object({
   ...base,
   kind: z.literal('image'),
@@ -136,6 +146,7 @@ export const elementSchema = z.discriminatedUnion('kind', [
   edgeSchema,
   textSchema,
   groupSchema,
+  frameSchema,
   imageSchema,
   drawSchema,
   instanceSchema,
@@ -145,6 +156,7 @@ export type NodeElement = z.infer<typeof nodeSchema>
 export type EdgeElement = z.infer<typeof edgeSchema>
 export type TextElement = z.infer<typeof textSchema>
 export type GroupElement = z.infer<typeof groupSchema>
+export type FrameElement = z.infer<typeof frameSchema>
 export type ImageElement = z.infer<typeof imageSchema>
 export type DrawElement = z.infer<typeof drawSchema>
 export type InstanceElement = z.infer<typeof instanceSchema>

@@ -158,6 +158,9 @@ function cascadeFor(board: Board, id: Id): Op[] {
     } else if (el.kind === 'group' && el.members.includes(id)) {
       const members = el.members.filter((m) => m !== id)
       ops.push(members.length ? { op: 'update', id: el.id, set: { members } } : { op: 'remove', id: el.id })
+    } else if (el.kind === 'frame' && el.members.includes(id)) {
+      // An emptied frame stays: it is a named area, and can be filled again.
+      ops.push({ op: 'update', id: el.id, set: { members: el.members.filter((m) => m !== id) } })
     } else if ('at' in el && el.at && 'kind' in el.at && el.at.kind === 'rel' && el.at.of === id) {
       // Keep dependents where they are by pinning them to their current position.
       boxes ??= resolveBoxes(board)
@@ -180,6 +183,7 @@ export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): 
     !!el && (el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'draw' || el.kind === 'instance')
 
   const parentOf = new Map<Id, Id>()
+  const frameOf = new Map<Id, Id>()
   for (const el of board.elements) {
     if (el.kind === 'edge') {
       for (const [side, end] of [['from', el.from], ['to', el.to]] as const) {
@@ -200,10 +204,20 @@ export function checkBoard(board: Board, opts: { definitions?: boolean } = {}): 
     if ((el.kind === 'node' || el.kind === 'text' || el.kind === 'image' || el.kind === 'instance') && el.at?.kind === 'rel') {
       if (!isAnchor(byId.get(el.at.of))) issues.push(`"${el.id}" is placed ${el.at.dir} unknown "${el.at.of}"`)
     }
+    if (el.kind === 'frame') {
+      for (const m of el.members) {
+        const member = byId.get(m)
+        if (!member) issues.push(`frame "${el.id}" has unknown member "${m}"`)
+        else if (member.kind === 'frame') issues.push(`frame "${el.id}" can't contain frame "${m}"`)
+        if (frameOf.has(m)) issues.push(`"${m}" is in both frames "${frameOf.get(m)}" and "${el.id}"`)
+        frameOf.set(m, el.id)
+      }
+    }
     if (el.kind === 'group') {
       for (const m of el.members) {
         const member = byId.get(m)
         if (!member) issues.push(`group "${el.id}" has unknown member "${m}"`)
+        else if (member.kind === 'frame') issues.push(`group "${el.id}" can't contain frame "${m}"`)
         if (parentOf.has(m)) issues.push(`"${m}" is in both groups "${parentOf.get(m)}" and "${el.id}"`)
         parentOf.set(m, el.id)
       }

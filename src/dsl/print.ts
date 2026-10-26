@@ -77,6 +77,9 @@ export function printElement(el: BoardElement, opts: { hints?: boolean } = {}): 
     case 'group':
       parts = ['group', el.id, ...(el.label !== undefined ? [quote(el.label)] : []), `[${el.members.join(', ')}]`]
       break
+    case 'frame':
+      parts = ['frame', el.id, quote(el.label), `[${el.members.join(', ')}]`, ...(el.at ? [`at${point(el.at)}`] : []), ...size(el.size)]
+      break
     case 'image':
       parts = ['image', el.id, `asset:${el.asset}`, ...placement(el.at), ...size(el.size)]
       break

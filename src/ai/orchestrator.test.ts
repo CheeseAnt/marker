@@ -146,7 +146,7 @@ describe('runEdit', () => {
   it('offers tool schemas the model can follow', () => {
     const edit = TOOLS[0].parameters as { properties: { ops: { items: { oneOf?: unknown[]; anyOf?: unknown[] } } } }
     const variants = edit.properties.ops.items.oneOf ?? edit.properties.ops.items.anyOf
-    expect(variants).toHaveLength(14)
+    expect(variants).toHaveLength(15)
     expect(edit.properties).toHaveProperty('undo_first')
   })
 })
@@ -164,6 +164,14 @@ describe('toCoreOps', () => {
     expect(ops[1]).toEqual({ op: 'reorder', id: 'api', after: 'e1' })
     expect(ops[2]).toEqual({ op: 'board', set: { defaults: { font: 'display' } } })
     expect(issues).toEqual(['ops[1] (update "e1"): only nodes have a shape', 'ops[1] (update "e1"): nothing to change', 'ops[3] (ungroup "api"): "api" is not a group'])
+  })
+
+  it('adds a frame, and changes it with the same op', () => {
+    const first = toCoreOps(board, [{ op: 'frame', id: 'f', label: 'Backend', members: ['api', 'db'] }])
+    expect(first.ops).toEqual([{ op: 'add', element: { kind: 'frame', id: 'f', label: 'Backend', members: ['api', 'db'], style: {}, hints: {} } }])
+    const framed = commit(board, first.ops).board
+    expect(toCoreOps(framed, [{ op: 'frame', id: 'f', label: 'Data', members: ['db'] }]).ops).toEqual([{ op: 'update', id: 'f', set: { label: 'Data', members: ['db'] } }])
+    expect(toCoreOps(board, [{ op: 'frame', id: 'api', label: 'x', members: [] }]).issues).toEqual(['ops[0] (frame "api"): "api" is already a node'])
   })
 
   it('leaves room for a label on the arrow to a relatively placed node', () => {
