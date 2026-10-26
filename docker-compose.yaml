@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  spa-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marker-spa
+    ports:
+      - "3232:80"
+    restart: unless-stopped
