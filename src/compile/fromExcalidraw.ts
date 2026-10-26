@@ -13,7 +13,8 @@ import {
   type Id,
   type Point,
 } from '../model/types'
-import { FILL_STYLE, FONT_FAMILY, LABEL_SUFFIX, type ExElement } from './exTypes'
+import { DEFAULT_FONT, fontForFamily, fontPreset } from '../model/fonts'
+import { FILL_STYLE, LABEL_SUFFIX, type ExElement } from './exTypes'
 import { compileBoard, type Compiled } from './toExcalidraw'
 
 const EPS = 0.5
@@ -34,7 +35,6 @@ const STYLE_PROPS = [
 ] as const
 
 const PATTERN_OF = Object.fromEntries(Object.entries(FILL_STYLE).map(([k, v]) => [v, k]))
-const FONT_OF = Object.fromEntries(Object.entries(FONT_FAMILY).map(([k, v]) => [v, k]))
 
 type Patch = Record<string, unknown>
 
@@ -64,15 +64,15 @@ function defaultFont(board: Board, el: BoardElement): FontRef {
   const hinted = el.hints.fontFamily
   return {
     fontSize: style.fontSize ?? DEFAULT_FONT_SIZE,
-    fontFamily: typeof hinted === 'number' ? hinted : FONT_FAMILY[style.font ?? 'hand'],
+    fontFamily: typeof hinted === 'number' ? hinted : fontPreset(style.font).family,
   }
 }
 
 function fontDiff(ex: ExElement, c: FontRef, style: Patch, hints: Patch) {
   if (ex.fontSize !== c.fontSize) style.fontSize = ex.fontSize
   if (ex.fontFamily !== c.fontFamily) {
-    const font = FONT_OF[ex.fontFamily ?? FONT_FAMILY.hand]
-    style.font = font ?? 'hand'
+    const font = fontForFamily(ex.fontFamily)
+    style.font = font ?? DEFAULT_FONT
     hints.fontFamily = font ? null : (ex.fontFamily ?? null)
   }
 }
@@ -214,6 +214,10 @@ export function diffScene({ board, compiled, scene }: DiffContext): Op[] {
         Object.assign(hints, diffHints(el, headOf(ex).hints))
         // An empty label renders nothing, so it is the same as no label.
         if ((labelOf.get(el.id)?.text || undefined) !== (el.label || undefined)) set.label = labelOf.get(el.id)?.text || null
+        {
+          const label = labelOf.get(el.id)
+          if (label) fontDiff(label, compiledById.get(el.id + LABEL_SUFFIX) ?? defaultFont(board, el), style, hints)
+        }
         break
     }
     finish(set, style, hints)

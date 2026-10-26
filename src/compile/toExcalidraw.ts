@@ -1,4 +1,5 @@
 import { center, DEFAULT_FONT_SIZE, effectiveStyle, measureText, resolveBoxes, type Box } from '../model/geometry'
+import { fontPreset } from '../model/fonts'
 import { hashString } from '../model/hash'
 import { parsePath } from '../model/path'
 import type { Board, BoardElement, EdgeElement, Endpoint, Hints, Id, Point, Style } from '../model/types'
@@ -7,7 +8,6 @@ import {
   DEFAULT_FILL,
   DEFAULT_STROKE,
   FILL_STYLE,
-  FONT_FAMILY,
   labelId,
   ROUNDNESS,
   STICKY_FILL,
@@ -56,7 +56,7 @@ function base(el: BoardElement, type: string, box: Box, style: Style, groupIds: 
 }
 
 function fontFamily(style: Style, hints: Hints): number {
-  return hintNum(hints, 'fontFamily') ?? FONT_FAMILY[style.font ?? 'hand']
+  return hintNum(hints, 'fontFamily') ?? fontPreset(style.font).family
 }
 
 function textElement(
@@ -70,7 +70,7 @@ function textElement(
   seedSource: BoardElement,
 ): ExElement {
   const fontSize = style.fontSize ?? DEFAULT_FONT_SIZE
-  const size = measureText(text, fontSize)
+  const size = measureText(text, fontSize, style.font)
   const pos = container ? { x: container.center.x - size.w / 2, y: container.center.y - size.h / 2 } : at
   const el = base({ ...seedSource, id, hints: container ? {} : hints }, 'text', { ...pos, ...size }, style, groupIds)
   return {

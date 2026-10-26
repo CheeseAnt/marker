@@ -16,7 +16,7 @@
   --font-ui: 'Atkinson Hyperlegible', 'Segoe UI', system-ui, sans-serif;
   /* Registered by Excalidraw from the self-hosted fonts in public/fonts. */
   --font-hand: 'Excalifont', 'Comic Shanns', 'Comic Sans MS', cursive;
-  --font-code: 'Cascadia', 'Cascadia Code', ui-monospace, monospace;
+  --font-code: 'BoardBot Code', 'Cascadia Code', ui-monospace, monospace;
 
   --step--1: 0.8125rem;
   --step-0: 0.9375rem;
@@ -29,8 +29,9 @@
   color-scheme: light;
 }
 
+/* Its own name: Excalidraw registers "Cascadia" itself, and two faces with one name confuse loading. */
 @font-face {
-  font-family: 'Cascadia';
+  font-family: 'BoardBot Code';
   src: url('/fonts/Cascadia/CascadiaCode-Regular.woff2') format('woff2');
   font-display: swap;
 }
@@ -75,6 +76,51 @@ button {
   inset: 0;
 }
 
+/* Changes from a request get a passing stroke of blue marker. */
+.change-highlights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.change-highlight {
+  position: absolute;
+  border: 3px solid var(--marker-blue);
+  border-radius: 10px 14px 9px 13px;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .change-highlight {
+    animation: change-mark 1.6s ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .change-highlight {
+    opacity: 0.7;
+  }
+}
+
+@keyframes change-mark {
+  0% {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  15% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  70% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* History is owned by BoardBot, not Excalidraw (plan §2). */
 .canvas .undo-redo-buttons {
   display: none;
@@ -94,6 +140,39 @@ button {
     linear-gradient(to bottom, var(--frame-light), var(--frame) 70%, #aeb5bc);
   border-top: 1px solid var(--frame-deep);
   box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.08);
+  position: relative;
+}
+
+/* While a request runs, a stroke of blue marker travels along the ledge's lip. */
+.ledge[data-busy]::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--marker-blue) 30%, var(--marker-blue) 70%, transparent) 0 0 / 40% 100% no-repeat;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ledge[data-busy]::before {
+    animation: marker-sweep 1.6s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledge[data-busy]::before {
+    background: var(--marker-blue);
+  }
+}
+
+@keyframes marker-sweep {
+  from {
+    background-position: -60% 0;
+  }
+  to {
+    background-position: 160% 0;
+  }
 }
 
 .ledge-field {
@@ -243,6 +322,124 @@ button {
 .status-link:hover {
   color: var(--ink);
   text-decoration: underline;
+}
+
+/* ---- Jobs and toasts ---------------------------------------------------- */
+
+.job-status {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.job-stage {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.job-prompt {
+  font-family: var(--font-hand);
+  font-size: var(--step-0);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.job-meta {
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 4.25rem;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: max-content;
+  max-width: min(34rem, calc(100% - 2rem));
+  padding: 0.625rem 0.75rem 0.625rem 1rem;
+  background: #fff;
+  border: 1px solid var(--frame-deep);
+  border-left: 4px solid var(--marker-blue);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgb(30 30 30 / 0.16);
+}
+
+.toast.error {
+  border-left-color: var(--marker-red);
+}
+
+.toast.reply {
+  border-left-color: var(--frame-deep);
+}
+
+.toast-body p {
+  margin: 0;
+}
+
+.toast-prompt {
+  font-family: var(--font-hand);
+  font-size: var(--step-1);
+  line-height: 1.25;
+  color: var(--ink-soft);
+  margin-bottom: 0.125rem !important;
+}
+
+.toast-text {
+  font-size: var(--step-0);
+  line-height: 1.45;
+  max-width: 60ch;
+}
+
+.toast.error .toast-text {
+  color: var(--marker-red);
+}
+
+.toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.toast-action {
+  border: 0;
+  background: none;
+  padding: 0.125rem 0.375rem;
+  color: var(--marker-blue);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.toast-dismiss {
+  border: 0;
+  background: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: toast-in 160ms ease-out;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
 }
 
 /* ---- Settings dialog ----------------------------------------------------- */

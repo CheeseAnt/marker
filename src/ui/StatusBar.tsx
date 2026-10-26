@@ -2,6 +2,7 @@ import { isProviderReady, PROVIDER_LABELS } from '../ai/providers'
 import { hasApiKey, useSettings } from '../settings/store'
 import { useBoard } from '../state/board'
 import { DRAWER_LABELS, type DrawerView } from './drawerViews'
+import { JobStatus, SessionUsage } from './JobStatus'
 
 const VOICE_LABELS = {
   'moonshine-base': 'Moonshine base',
@@ -43,7 +44,9 @@ export function StatusBar({ notice, onDismissNotice, drawer, onToggleDrawer, onO
           </button>
         </span>
       ) : null}
+      <JobStatus />
       <span className="spacer" />
+      <SessionUsage />
       <span>{count === 1 ? '1 element' : `${count} elements`}</span>
       <button type="button" className="status-link" onClick={onOpenSettings}>
         Settings

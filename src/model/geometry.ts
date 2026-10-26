@@ -1,3 +1,4 @@
+import { fontPreset, type FontId } from './fonts'
 import { parsePath } from './path'
 import type { Board, BoardElement, Id, NodeElement, Placement, Size, Style, TextElement } from './types'
 
@@ -10,22 +11,21 @@ export interface Box {
 
 export const DEFAULT_FONT_SIZE = 20
 const LINE_HEIGHT = 1.25
-// Average glyph width relative to font size for the hand-drawn font; Excalidraw re-measures in the browser.
-const CHAR_WIDTH = 0.55
 const UNPLACED_GAP = 80
 
 export function effectiveStyle(board: Board, el: { style: Style }): Style {
   return { ...board.defaults, ...el.style }
 }
 
-export function measureText(text: string, fontSize: number): Size {
+/** Estimated text size. Excalidraw re-measures for real in the browser; this is for layout. */
+export function measureText(text: string, fontSize: number, font?: FontId): Size {
   const lines = text.split('\n')
   const longest = Math.max(1, ...lines.map((l) => l.length))
-  return { w: Math.ceil(longest * fontSize * CHAR_WIDTH), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
+  return { w: Math.ceil(longest * fontSize * fontPreset(font).charWidth), h: Math.ceil(lines.length * fontSize * LINE_HEIGHT) }
 }
 
-export function defaultNodeSize(node: NodeElement, fontSize: number): Size {
-  const text = measureText(node.label || ' ', fontSize)
+export function defaultNodeSize(node: NodeElement, fontSize: number, font?: FontId): Size {
+  const text = measureText(node.label || ' ', fontSize, font)
   const pad = { rect: [40, 40], sticky: [40, 40], ellipse: [70, 50], diamond: [110, 70] }[node.shape]
   const min = node.shape === 'sticky' ? { w: 160, h: 160 } : { w: 120, h: 60 }
   return {
@@ -39,9 +39,9 @@ export function intrinsicSize(board: Board, el: BoardElement): Size | undefined 
   const fontSize = style.fontSize ?? DEFAULT_FONT_SIZE
   switch (el.kind) {
     case 'node':
-      return el.size ?? defaultNodeSize(el, fontSize)
+      return el.size ?? defaultNodeSize(el, fontSize, style.font)
     case 'text':
-      return measureText((el as TextElement).text, fontSize)
+      return measureText((el as TextElement).text, fontSize, style.font)
     case 'image':
       return el.size
     default:

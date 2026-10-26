@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { isProviderReady } from '../ai/providers'
+import { isPending, useJobs } from '../jobs/queue'
 import { useSettings } from '../settings/store'
+import { canvasSelection } from '../state/canvasBridge'
 
 function MicIcon() {
   return (
@@ -22,6 +24,7 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const input = useRef<HTMLInputElement>(null)
   const ready = useSettings((s) => isProviderReady(s.settings, s.secrets))
   const focusKey = useSettings((s) => s.settings.shortcuts.focusPrompt)
+  const busy = useJobs((s) => s.jobs.some(isPending))
 
   // The focus shortcut works from anywhere except while typing in another field.
   useEffect(() => {
@@ -38,10 +41,15 @@ export function PromptBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   return (
     <form
       className="ledge"
+      data-busy={busy || undefined}
       onSubmit={(e) => {
         e.preventDefault()
-        if (!ready) onOpenSettings()
-        // Sent to the edit pipeline in phase 5.
+        if (!ready) return onOpenSettings()
+        const prompt = text.trim()
+        if (!prompt) return
+        // The selection at the moment of sending is what "this" refers to.
+        useJobs.getState().submit(prompt, { selection: canvasSelection() })
+        setText('')
       }}
     >
       <div className="ledge-field">

@@ -1,5 +1,6 @@
 // Test-only fast-check generators for valid boards.
 import fc from 'fast-check'
+import { FONT_IDS } from './fonts'
 import type { Board, BoardElement, Endpoint, Hints, Placement, Style } from './types'
 
 const coord = fc.integer({ min: -2000, max: 2000 })
@@ -16,7 +17,7 @@ export const styleArb: fc.Arbitrary<Style> = fc.record(
     rough: fc.constantFrom(0, 1, 2),
     pattern: fc.constantFrom('hachure', 'solid', 'cross', 'zigzag'),
     opacity: fc.integer({ min: 0, max: 100 }),
-    font: fc.constantFrom('hand', 'normal', 'code'),
+    font: fc.constantFrom(...FONT_IDS),
     fontSize: fc.constantFrom(16, 20, 28, 36),
     align: fc.constantFrom('left', 'center', 'right'),
   },

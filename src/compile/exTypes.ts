@@ -68,7 +68,6 @@ export function labelId(ownerId: string): string {
   return ownerId + LABEL_SUFFIX
 }
 
-export const FONT_FAMILY = { hand: 5, normal: 6, code: 8 } as const
 export const ROUNDNESS = { proportional: 2, adaptive: 3 } as const
 export const DEFAULT_STROKE = '#1e1e1e'
 export const DEFAULT_FILL = 'transparent'

@@ -366,6 +366,42 @@ recording → transcribing → queued → building context → calling model →
 - **Shortcuts:** `/` focuses the prompt bar and Escape returns to the canvas. Both are in the settings schema (`shortcuts`); the remapping UI comes with phase 7.
 - **Live check still needed:** tests use a mocked Azure. The first real "Test connection" against `gpt-5.6-luna` should be done by hand.
 
+**Phase 5 (done, 2026-10-26)**
+- **Model tools:** `edit_board({summary, ops})` and `reply({message})`, sent with `toolChoice: 'required'`. Their JSON Schemas come from the zod schemas in `src/ai/llmOps.ts`.
+  - Model ops: `add_node`, `add_text`, `add_edge` (id optional), `add_drawing`, `update`, `remove`, `group`, `ungroup`, `reorder`.
+  - Placement is relative (`{rel, of, gap}`), absolute, or left out for automatic layout.
+  - They translate to core ops, and mistakes the model can fix come back as readable issues.
+- **Orchestrator (`runEdit`):**
+  - context is the board text without render hints, the selection captured when the request was sent, and the request;
+  - zod validation, then translation, then a test `commit`, with failures returned as a tool result, for up to 2 repairs;
+  - then `placeUnplaced`;
+  - result is one transaction titled with the model's summary, with the prompt stored on it.
+  - Boards over 24k characters send only the selection and its neighbours in full, plus a capped id summary.
+- **Job queue (basic):** one request at a time, so each edit is validated against the board the previous one left. Stages are thinking, correcting and placing; jobs can be cancelled, show live token counts, and track session token usage. The full queue panel is phase 8.
+- **Feedback:**
+  - the status strip shows the active request with elapsed time and tokens, plus Cancel;
+  - a blue marker stroke sweeps along the ledge while busy;
+  - a toast says what changed, with Undo (which only undoes if it's still the latest change);
+  - replies and errors show in the toast with Try again;
+  - changed shapes get a fading marker ring instead of being selected, because selecting opens Excalidraw's style panel over the board.
+- **Testing:** unit tests use a scripted provider, and E2E tests use a mocked Azure (edit and undo, reply, repair, cancel). `e2e/live.spec.ts` runs one real request when the `BOARDBOT_AZURE_*` env vars are set.
+- **Still to do:** the ~30-prompt eval set. It needs live runs to record responses first.
+- **Recent context and follow-ups (done):** `src/ai/recent.ts` adds two sections to each request:
+  - "Recent conversation": up to 4 finished requests from the last 30 minutes, each with the reply text, the change made, the error or the cancellation. This makes "yes, do that" work.
+  - "Recent changes": the 5 newest history entries with source, request and touched ids.
+
+  `edit_board` takes `undo_first: n` (0–5):
+  - the orchestrator validates the new ops against the board after undoing on a copy;
+  - the queue checks that those are still the newest changes, really undoes them, then applies the new ops as one step, so undoing it goes back to before the rejected change;
+  - `undo_first` with no ops is a plain undo.
+
+**Fonts (done, 2026-10-26)**
+- **Seven presets (`src/model/fonts.ts`),** each mapped to a typeface Excalidraw ships and we host ourselves: `hand` (Excalifont, default), `virgil` (Classic sketch), `normal` (Rounded / Nunito), `sans` (Plain / Liberation Sans), `display` (Headline / Lilita One), `code` (Comic Shanns), `mono` (Cascadia).
+- **Board font:** `style default font=…`, set from Excalidraw's main menu ("Board font", each option shown in its own face). It's one undoable step, and Excalidraw's font for new text follows it.
+- **Per element:** `font=` on any node, edge label or text. Picking a font in Excalidraw's style panel is recorded on that element (deprecated faces are enabled so Virgil and Cascadia can be picked). A face outside the presets is kept as a `fontFamily` hint.
+- **The model** can set per-element fonts through `style.font`, and the board font with `set_board_font`.
+- **Text measurement** estimates width per font. All preset faces are loaded on startup, then the scene is re-measured so text drawn before a face arrived isn't clipped. The text panel's code face is named "BoardBot Code" so it doesn't clash with Excalidraw's "Cascadia".
+
 ## Verification
 - **Unit (vitest):** DSL parse/print round-trip, compile/decompile round-trip (fast-check property tests), `applyOp`/`invertOp` identity (`apply(inv(apply(op)))` restores the state), Excalidraw-diff-to-ops cases.
 - **LLM eval set:** about 30 golden prompts with starting boards. Recorded provider responses are used for deterministic CI. A manual `npm run eval:live` runs against the real Azure deployment and scores op validity and expected structural outcomes.

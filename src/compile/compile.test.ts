@@ -205,3 +205,61 @@ describe('diffScene', () => {
     expect(again).toEqual([])
   })
 })
+
+describe('fonts', () => {
+  const fonted = parseBoard(`board "f" v1
+style default font=normal
+
+node a "Default" rect at(0,0)
+node b "Own font" rect at(0,200) font=display
+text t "Code note" at(300,0) font=mono
+edge e a -> b "labelled" font=virgil
+`)
+  const family = (els: ExElement[], id: string) => byId(els, id).fontFamily
+
+  it('uses the board default unless an element sets its own', () => {
+    const { elements } = compileBoard(fonted)
+    expect(family(elements, 'a~label')).toBe(6)
+    expect(family(elements, 'b~label')).toBe(7)
+    expect(family(elements, 't')).toBe(3)
+    expect(family(elements, 'e~label')).toBe(1)
+  })
+
+  it('records a font picked on the canvas on that element only', () => {
+    for (const [familyNumber, font] of [[5, 'hand'], [1, 'virgil'], [9, 'sans'], [8, 'code']] as const) {
+      for (const id of ['t', 'e']) {
+        const target = id === 't' ? 't' : 'e~label'
+        // Picking the font an element already has is not a change.
+        if (byId(compileBoard(fonted).elements, target).fontFamily === familyNumber) continue
+        const { ops, next, again } = editScene(fonted, (s) => {
+          byId(s, target).fontFamily = familyNumber
+        })
+        expect(ops).toEqual([{ op: 'update', id, set: { style: { font } } }])
+        expect(next.elements.find((e) => e.id === 'b')?.style.font).toBe('display')
+        expect(again).toEqual([])
+      }
+    }
+  })
+
+  it('resizes an auto-sized node to fit its label in a new font', () => {
+    const { ops, next } = editScene(fonted, (s) => {
+      byId(s, 'a~label').fontFamily = 3
+    })
+    expect(ops).toEqual([{ op: 'update', id: 'a', set: { style: { font: 'mono' } } }])
+    expect(byId(compileBoard(next).elements, 'a').width).not.toBe(byId(compileBoard(fonted).elements, 'a').width)
+  })
+
+  it('keeps fonts outside the presets as a hint', () => {
+    const { ops, next } = editScene(fonted, (s) => {
+      byId(s, 't').fontFamily = 2
+    })
+    expect(ops).toEqual([{ op: 'update', id: 't', set: { style: { font: 'hand' }, hints: { fontFamily: 2 } } }])
+    expect(family(compileBoard(next).elements, 't')).toBe(2)
+  })
+
+  it('changing the board default restyles elements that follow it', () => {
+    const next = commit(fonted, [{ op: 'board', set: { defaults: { font: 'virgil' } } }]).board
+    expect(family(compileBoard(next).elements, 'a~label')).toBe(1)
+    expect(family(compileBoard(next).elements, 'b~label')).toBe(7)
+  })
+})

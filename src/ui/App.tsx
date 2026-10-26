@@ -6,6 +6,7 @@ import { Drawer } from './Drawer'
 import type { DrawerView } from './drawerViews'
 import { PromptBar } from './PromptBar'
 import { SettingsDialog } from './SettingsDialog'
+import { ToastSlot } from './Toast'
 import { StatusBar } from './StatusBar'
 
 export default function App() {
@@ -54,7 +55,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <main className="canvas">{loaded && <BoardCanvas onError={onError} />}</main>
+      <main className="canvas">
+        {loaded && <BoardCanvas onError={onError} />}
+        <ToastSlot />
+      </main>
       {drawer && <Drawer view={drawer} />}
       <PromptBar onOpenSettings={() => setSettingsOpen(true)} />
       <StatusBar

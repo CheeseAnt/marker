@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { FONT_IDS } from './fonts'
 
 // Ids are plain identifiers. Elements drawn by hand in Excalidraw keep Excalidraw's own id.
 export const idSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_-]*$/, 'ids must be identifiers')
@@ -33,7 +34,7 @@ export const styleSchema = z
     rough: z.number().int().min(0).max(2),
     pattern: z.enum(['hachure', 'solid', 'cross', 'zigzag']),
     opacity: z.number().min(0).max(100),
-    font: z.enum(['hand', 'normal', 'code']),
+    font: z.enum(FONT_IDS),
     fontSize: z.number().positive(),
     align: z.enum(['left', 'center', 'right']),
   })
